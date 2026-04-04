@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@theme {
+  /* ClearWave brand colors */
+  --color-primary:       #0EA5E9; /* sky-500 */
+  --color-primary-dark:  #0284C7; /* sky-600 */
+
+  /* Surfaces */
+  --color-surface:       #F8FAFC; /* slate-50 */
+  --color-card:          #FFFFFF;
+  --color-border:        #E2E8F0; /* slate-200 */
+
+  /* Text */
+  --color-text:          #0F172A; /* slate-900 */
+  --color-muted:         #64748B; /* slate-500 */
+
+  /* Status */
+  --color-success:       #22C55E; /* green-500 */
+  --color-warning:       #F59E0B; /* amber-500 */
+  --color-danger:        #EF4444; /* red-500 */
+}
+
+/* Base styles */
+body {
+  @apply bg-surface text-text font-sans antialiased;
+}
