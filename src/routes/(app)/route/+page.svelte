@@ -4,18 +4,22 @@
   import type { PageData } from './$types'
 
   let { data }: { data: PageData } = $props()
-  let { visits, route, routeVisits, selectedDate, today, googleMapsKey } = $derived(data)
+  let { visits, route, routeVisits, selectedDate, today, googleMapsKey, backlog } = $derived(data)
 
   let map: any = null
   let markers: any[] = []
   let mapEl: HTMLDivElement
   let originInputEl: HTMLInputElement
 
-  // Usar origen guardado en la ruta si existe
   let originLat = $state<number | null>(route?.origin_lat ?? null)
   let originLng = $state<number | null>(route?.origin_lng ?? null)
   let originLabel = $state('')
   let gettingLocation = $state(false)
+
+  // AI
+  let loadingAI = $state(false)
+  let suggestion = $state<any>(null)
+  let aiError = $state('')
 
   const statusColors: Record<string, string> = {
     pending:     '#0EA5E9',
@@ -31,13 +35,12 @@
       : visits.map((v: any, i: number) => ({
           visit_id: v.id,
           position: i + 1,
-          visits: v,  // visit directo del load
+          visits: v,
           estimated_arrival: v.scheduled_time?.slice(0, 5) ?? null,
           estimated_travel_mins: null
         }))
   )
 
-  // Helper para obtener el visit object de cualquier formato
   function getVisit(rv: any): any {
     return rv.visits ?? null
   }
@@ -80,8 +83,64 @@
     )
   }
 
+  async function getAISuggestion() {
+    loadingAI = true
+    aiError = ''
+    suggestion = null
+
+    const now = new Date()
+    const currentTime = now.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+
+    const visitsPayload = orderedVisits.map((rv: any) => {
+      const v = getVisit(rv)
+      return {
+        id: v?.id ?? rv.visit_id,
+        address: v?.properties?.address ?? '',
+        suburb: v?.properties?.suburb ?? '',
+        customerName: v?.properties?.customers?.name ?? '',
+        status: v?.status ?? '',
+        estimatedArrival: rv.estimated_arrival,
+        lat: v?.properties?.lat,
+        lng: v?.properties?.lng
+      }
+    })
+
+    const todayDate = new Date(selectedDate + 'T00:00:00')
+    const backlogPayload = (backlog ?? []).map((v: any) => {
+      const visitDate = new Date(v.scheduled_date + 'T00:00:00')
+      const daysOverdue = Math.floor((todayDate.getTime() - visitDate.getTime()) / (1000 * 60 * 60 * 24))
+      return {
+        id: v.id,
+        address: v.properties?.address ?? '',
+        suburb: v.properties?.suburb ?? '',
+        customerName: v.properties?.customers?.name ?? '',
+        daysOverdue,
+        lat: v.properties?.lat,
+        lng: v.properties?.lng
+      }
+    })
+
+    try {
+      const res = await fetch('/api/ai-day', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentLat: originLat,
+          currentLng: originLng,
+          visits: visitsPayload,
+          backlog: backlogPayload,
+          currentTime
+        })
+      })
+      suggestion = await res.json()
+    } catch {
+      aiError = 'Could not get suggestion. Try again.'
+    } finally {
+      loadingAI = false
+    }
+  }
+
   onMount(() => {
-    // Restaurar origen guardado
     const saved = sessionStorage.getItem('route_origin')
     if (saved) {
       const { lat, lng, label } = JSON.parse(saved)
@@ -127,7 +186,8 @@
           sessionStorage.setItem('route_origin', JSON.stringify({ lat: originLat, lng: originLng, label: originLabel }))
           updateMarkers()
         }
-      })    }
+      })
+    }
 
     updateMarkers()
   }
@@ -139,7 +199,6 @@
 
     const bounds = new (window as any).google.maps.LatLngBounds()
 
-    // Origin marker
     if (originLat && originLng) {
       const originMarker = new (window as any).google.maps.Marker({
         position: { lat: originLat, lng: originLng },
@@ -202,7 +261,6 @@
   })
 
   $effect(() => {
-    // Redibujar cuando cambia el origen
     if (map && (originLat || originLng)) updateMarkers()
   })
 
@@ -228,13 +286,9 @@
   <div class="bg-card border border-border rounded-xl p-4 mb-4">
     <p class="text-sm font-medium text-text mb-2">Starting from</p>
     <div class="flex gap-2">
-      <input
-        bind:this={originInputEl}
-        type="text"
-        placeholder="Enter starting address..."
+      <input bind:this={originInputEl} type="text" placeholder="Enter starting address..."
         class="flex-1 px-3 py-2 rounded-lg border border-border bg-white text-text text-sm
-               focus:outline-none focus:ring-2 focus:ring-primary"
-      />
+               focus:outline-none focus:ring-2 focus:ring-primary" />
       <button type="button" onclick={useCurrentLocation} disabled={gettingLocation}
         class="flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-xs text-muted
                hover:bg-surface transition-colors disabled:opacity-50 flex-shrink-0">
@@ -246,15 +300,61 @@
         My location
       </button>
     </div>
-    {#if originLat && originLabel !== 'Current location'}
-      <p class="text-xs text-muted mt-1.5">📍 {originLabel}</p>
-    {:else if originLat && originLabel === 'Current location'}
-      <p class="text-xs text-muted mt-1.5">📍 Location detected</p>
+    {#if originLat && originLabel}
+      <p class="text-xs text-muted mt-1.5">📍 {originLabel === 'Current location' ? 'Location detected' : originLabel}</p>
     {/if}
   </div>
 
   <!-- Map -->
   <div bind:this={mapEl} class="w-full h-64 rounded-xl border border-border mb-4 bg-surface"></div>
+
+  <!-- AI suggestion button -->
+  {#if visits.length > 0}
+    <div class="mb-4">
+      <button type="button" onclick={getAISuggestion} disabled={loadingAI}
+        class="w-full py-2.5 flex items-center justify-center gap-2 bg-slate-900 text-white text-sm font-medium rounded-xl
+               hover:bg-slate-800 transition-colors disabled:opacity-50">
+        {#if loadingAI}
+          <svg class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+          Thinking…
+        {:else}
+          ✨ What should I do next?
+        {/if}
+      </button>
+
+      {#if aiError}
+        <p class="text-xs text-muted mt-2 text-center">{aiError}</p>
+      {/if}
+
+      {#if suggestion}
+        <div class="mt-3 bg-slate-900 text-white rounded-xl p-4">
+          <p class="text-sm font-medium mb-1">{suggestion.suggestion}</p>
+          {#if suggestion.reason}
+            <p class="text-xs text-slate-400 mb-3">{suggestion.reason}</p>
+          {/if}
+          <div class="flex gap-2">
+            {#if suggestion.lat && suggestion.lng}
+              <button type="button"
+                onclick={() => openGoogleMaps(suggestion.lat, suggestion.lng, suggestion.address)}
+                class="flex-1 py-2 bg-primary text-white text-xs font-medium rounded-lg hover:bg-primary-dark transition-colors">
+                Navigate →
+              </button>
+            {/if}
+            {#if suggestion.visitId}
+              <a href="/visits/{suggestion.visitId}?from=route"
+                class="flex-1 py-2 bg-white/10 text-white text-xs font-medium rounded-lg hover:bg-white/20 transition-colors text-center">
+                Open visit
+              </a>
+            {/if}
+            <button type="button" onclick={() => suggestion = null}
+              class="py-2 px-3 bg-white/10 text-white text-xs rounded-lg hover:bg-white/20 transition-colors">
+              ✕
+            </button>
+          </div>
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Optimize button -->
   {#if visits.length >= 1}
@@ -287,7 +387,6 @@
         {@const visit = getVisit(rv)}
         {#if visit}
           <div class="bg-card border border-border rounded-xl px-4 py-3">
-            <!-- Visit info -->
             <div class="flex items-center gap-3 mb-2">
               <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-sm font-bold"
                 style="background-color: {statusColors[visit.status] ?? '#0EA5E9'}">
@@ -314,7 +413,6 @@
               </span>
             </div>
 
-            <!-- Action buttons -->
             <div class="flex gap-2 pt-2 border-t border-border">
               {#if visit.status === 'pending' || visit.status === 'skipped'}
                 <form method="POST" action="/api/visits/start" class="flex-1">

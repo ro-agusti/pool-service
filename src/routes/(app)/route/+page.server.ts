@@ -23,6 +23,20 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const visits = (visitsRaw ?? []).filter((v: any) => v.properties?.lat && v.properties?.lng)
 
+  // Backlog — visitas vencidas pendientes
+  const { data: backlogRaw } = await locals.supabase
+    .from('visits')
+    .select(`
+      id, status, scheduled_date,
+      properties ( id, address, suburb, lat, lng, customers ( name ) )
+    `)
+    .in('status', ['pending', 'skipped'])
+    .lt('scheduled_date', selectedDate)
+    .eq('technician_id', locals.user!.id)
+    .order('scheduled_date')
+
+  const backlog = (backlogRaw ?? []).filter((v: any) => v.properties?.lat && v.properties?.lng)
+
   const { data: route } = await locals.supabase
     .from('routes')
     .select('id, status, optimized_at, date, origin_lat, origin_lng')
@@ -51,6 +65,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   return {
     visits,
+    backlog,
     route: route ?? null,
     routeVisits,
     selectedDate,
