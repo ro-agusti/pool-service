@@ -16,6 +16,7 @@
       <nav class="hidden md:flex items-center gap-1">
         <a href="/dashboard" class="px-3 py-1.5 text-sm text-muted hover:text-text rounded-lg hover:bg-surface transition-colors">Dashboard</a>
         <a href="/visits" class="px-3 py-1.5 text-sm text-muted hover:text-text rounded-lg hover:bg-surface transition-colors">Visits</a>
+        <a href="/route" class="px-3 py-1.5 text-sm text-muted hover:text-text rounded-lg hover:bg-surface transition-colors">Route</a>
         <a href="/customers" class="px-3 py-1.5 text-sm text-muted hover:text-text rounded-lg hover:bg-surface transition-colors">Customers</a>
       </nav>
     </div>

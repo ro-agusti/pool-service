@@ -4,7 +4,9 @@ import { PUBLIC_SUPABASE_URL } from '$env/static/public'
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private'
 import type { PageServerLoad, Actions } from './$types'
 
-export const load: PageServerLoad = async ({ locals, params }) => {
+export const load: PageServerLoad = async ({ locals, params, url }) => {
+  const fromRoute = url.searchParams.get('from') === 'route'
+
   const { data: visit } = await locals.supabase
     .from('visits')
     .select(`
@@ -21,7 +23,6 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 
   if (!visit) throw error(404, 'Visit not found')
 
-  // Última visita completada de esta propiedad en días anteriores
   const { data: lastVisit } = await locals.supabase
     .from('visits')
     .select('id, scheduled_date, scheduled_time')
@@ -32,11 +33,19 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     .limit(1)
     .single()
 
-  return { visit, lastVisit: lastVisit ?? null, user: locals.user }
+  // Ver si hay checklist guardado
+  const { data: checklist } = await locals.supabase
+    .from('visit_checklists')
+    .select('id')
+    .eq('visit_id', params.id)
+    .maybeSingle()
+
+  return { visit, lastVisit: lastVisit ?? null, user: locals.user, fromRoute, hasChecklist: !!checklist }
 }
 
 export const actions: Actions = {
-  complete: async ({ params, locals }) => {
+  complete: async ({ params, locals, url }) => {
+    const fromRoute = url.searchParams.get('from') === 'route'
     const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     await admin.from('visits').update({ status: 'completed' }).eq('id', params.id)
     await admin.from('visit_logs').insert({
@@ -47,10 +56,11 @@ export const actions: Actions = {
       new_status: 'completed'
     })
     const { redirect } = await import('@sveltejs/kit')
-    throw redirect(303, `/visits`)
+    throw redirect(303, fromRoute ? `/visits/${params.id}?from=route` : `/visits`)
   },
 
-  skip: async ({ request, params, locals }) => {
+  skip: async ({ request, params, locals, url }) => {
+    const fromRoute = url.searchParams.get('from') === 'route'
     const form = await request.formData()
     const skipReason = form.get('skipReason') as string
     const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
@@ -64,6 +74,6 @@ export const actions: Actions = {
       reason: skipReason
     })
     const { redirect } = await import('@sveltejs/kit')
-    throw redirect(303, `/visits`)
+    throw redirect(303, fromRoute ? `/route` : `/visits`)
   }
 }

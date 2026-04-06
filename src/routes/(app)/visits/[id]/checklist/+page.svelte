@@ -2,11 +2,13 @@
   import { enhance } from '$app/forms'
   import { createClient } from '@supabase/supabase-js'
   import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public'
+  import { onMount } from 'svelte'
   import type { PageData } from './$types'
 
   let { data }: { data: PageData } = $props()
   let { visit, checklist } = $derived(data)
 
+  let fromRoute = $state(false)
   let loading = $state(false)
   let loadingAI = $state(false)
   let recommendations = $state<any[]>([])
@@ -16,6 +18,24 @@
   let openWaterTest = $state(true)
   let openRecommendations = $state(false)
   let openChemicals = $state(true)
+
+  // Checkboxes con state para que carguen correctamente
+  let generalClean = $state(false)
+  let spinFilter = $state(false)
+
+  onMount(() => {
+    // Cargar checkboxes desde checklist existente
+    generalClean = checklist?.general_clean ?? false
+    spinFilter = checklist?.spin_filter ?? false
+
+    // fromRoute desde sessionStorage
+    if (data.fromRoute) {
+      sessionStorage.setItem(`visit_origin_${visit.id}`, 'route')
+      fromRoute = true
+    } else {
+      fromRoute = sessionStorage.getItem(`visit_origin_${visit.id}`) === 'route'
+    }
+  })
 
   const waterParams = [
     { name: 'ph',               label: 'pH',                min: 7.2,  max: 7.6,   step: '0.1', unit: '' },
@@ -50,7 +70,6 @@
     empty: { bg: 'bg-white border-border',         label: '',                              text: '' },
   }
 
-  // Chemicals
   let chemicals = $state<{ name: string; amount: string; unit: string }[]>(
     checklist?.chemicals_added?.length ? checklist.chemicals_added : []
   )
@@ -58,7 +77,6 @@
   function removeChemical(i: number) { chemicals = chemicals.filter((_, idx) => idx !== i) }
   const units = ['L', 'mL', 'kg', 'g', 'tabs']
 
-  // Photos
   let photos = $state<string[]>(checklist?.photos ?? [])
   let uploadingPhoto = $state(false)
 
@@ -66,7 +84,6 @@
     const input = e.target as HTMLInputElement
     if (!input.files?.length) return
     uploadingPhoto = true
-
     const supabase = createClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY)
     for (const file of Array.from(input.files)) {
       const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')
@@ -75,9 +92,7 @@
         .from('visit-photos')
         .upload(path, file, { upsert: true })
       if (!error && uploaded) {
-        const { data: { publicUrl } } = supabase.storage
-          .from('visit-photos')
-          .getPublicUrl(uploaded.path)
+        const { data: { publicUrl } } = supabase.storage.from('visit-photos').getPublicUrl(uploaded.path)
         photos = [...photos, publicUrl]
       }
     }
@@ -87,7 +102,6 @@
 
   function removePhoto(i: number) { photos = photos.filter((_, idx) => idx !== i) }
 
-  // AI
   async function getRecommendations() {
     loadingAI = true
     aiError = ''
@@ -124,16 +138,15 @@
 
 <div class="max-w-2xl">
   <div class="mb-6">
-    <a href="/visits/{visit.id}" class="text-sm text-muted hover:text-text transition-colors">← Visit</a>
-    <h1 class="text-xl font-semibold text-text mt-2">Checklist</h1>
+    <a href="/visits/{visit.id}{fromRoute ? '?from=route' : ''}" class="text-sm text-muted hover:text-text transition-colors">← Visit</a>
+    <h1 class="text-xl font-semibold text-text mt-2">{checklist ? 'Edit checklist' : 'Checklist'}</h1>
     <p class="text-sm text-muted">{visit.properties?.customers?.name} · {visit.properties?.address}</p>
   </div>
 
-  <form method="POST" action="?/save" use:enhance={() => {
+  <form method="POST" action="?/save{fromRoute ? '&from=route' : ''}" use:enhance={() => {
     loading = true
     return async ({ update }) => { await update(); loading = false }
   }}>
-    <!-- Photos hidden input -->
     <input type="hidden" name="photos" value={JSON.stringify(photos)} />
 
     <div class="space-y-3">
@@ -144,20 +157,20 @@
         <div class="space-y-3">
           <label class="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" name="general_clean"
-              checked={checklist?.general_clean ?? false}
+              bind:checked={generalClean}
               class="w-5 h-5 rounded border-border text-primary focus:ring-primary" />
             <span class="text-sm text-text">General clean</span>
           </label>
           <label class="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" name="spin_filter"
-              checked={checklist?.spin_filter ?? false}
+              bind:checked={spinFilter}
               class="w-5 h-5 rounded border-border text-primary focus:ring-primary" />
             <span class="text-sm text-text">SpinDisk water test</span>
           </label>
         </div>
       </div>
 
-      <!-- Water test — accordion -->
+      <!-- Water test -->
       <div class="bg-card border border-border rounded-xl overflow-hidden">
         <button type="button" onclick={() => openWaterTest = !openWaterTest}
           class="w-full flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors">
@@ -202,7 +215,7 @@
         {/if}
       </div>
 
-      <!-- AI Recommendations — accordion -->
+      <!-- AI Recommendations -->
       <div class="bg-card border border-border rounded-xl overflow-hidden">
         <button type="button" onclick={() => openRecommendations = !openRecommendations}
           class="w-full flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors">
@@ -238,7 +251,7 @@
         {/if}
       </div>
 
-      <!-- Chemicals added — accordion -->
+      <!-- Chemicals added -->
       <div class="bg-card border border-border rounded-xl overflow-hidden">
         <button type="button" onclick={() => openChemicals = !openChemicals}
           class="w-full flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors">
@@ -319,7 +332,7 @@
       <button type="submit" disabled={loading}
         class="w-full py-3 bg-primary text-white text-sm font-medium rounded-xl
                hover:bg-primary-dark transition-colors disabled:opacity-50">
-        {loading ? 'Saving…' : 'Save checklist'}
+        {loading ? 'Saving…' : checklist ? 'Update checklist' : 'Save checklist'}
       </button>
 
     </div>

@@ -1,12 +1,26 @@
 <script lang="ts">
   import { enhance } from '$app/forms'
+  import { onMount } from 'svelte'
   import type { PageData } from './$types'
 
   let { data }: { data: PageData } = $props()
-  let { visit, lastVisit } = $derived(data)
+  let { visit, lastVisit, hasChecklist } = $derived(data)
 
   let showSkip = $state(false)
   let skipReason = $state('')
+  let fromRoute = $state(false)
+
+  onMount(() => {
+    // Si viene con ?from=route, guardarlo
+    if (data.fromRoute) {
+      sessionStorage.setItem(`visit_origin_${visit.id}`, 'route')
+      fromRoute = true
+    } else {
+      // Leer el origen guardado
+      const saved = sessionStorage.getItem(`visit_origin_${visit.id}`)
+      fromRoute = saved === 'route'
+    }
+  })
 
   const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
 
@@ -39,8 +53,14 @@
 <div class="max-w-2xl">
   <!-- Header -->
   <div class="mb-4">
-    <a href="/visits" class="text-sm text-muted hover:text-text transition-colors">← Visits</a>
-    <div class="flex items-start justify-between mt-2">
+    <div class="flex items-center gap-3 mb-2">
+      {#if fromRoute}
+        <a href="/route" class="text-sm text-muted hover:text-text transition-colors">← Route</a>
+      {:else}
+        <a href="/visits" class="text-sm text-muted hover:text-text transition-colors">← Visits</a>
+      {/if}
+    </div>
+    <div class="flex items-start justify-between">
       <div>
         <h1 class="text-xl font-semibold text-text">{visit.properties?.customers?.name ?? '—'}</h1>
         <p class="text-sm text-muted mt-0.5">{visit.properties?.address}{#if visit.properties?.suburb}, {visit.properties.suburb}{/if}</p>
@@ -61,10 +81,10 @@
     </div>
   </div>
 
-  <!-- Last visit banner — in_progress o completed -->
+  <!-- Last visit banner -->
   {#if visit.status === 'in_progress' || visit.status === 'completed'}
     {#if lastVisit}
-      <a href="/visits/{lastVisit.id}"
+      <a href="/visits/{lastVisit.id}/checklist/view"
         class="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-4 hover:bg-blue-100 transition-colors">
         <div>
           <p class="text-xs text-blue-500">Last visit</p>
@@ -121,25 +141,26 @@
 
   <!-- Actions (solo si in_progress) -->
   {#if visit.status === 'in_progress'}
-    <!-- Checklist button -->
-    <a href="/visits/{visit.id}/checklist"
-      class="flex items-center justify-between bg-card border border-border rounded-xl px-4 py-3 mb-3 hover:bg-surface transition-colors">
+    <a href="/visits/{visit.id}/checklist{fromRoute ? '?from=route' : ''}"
+      class="flex items-center justify-between {hasChecklist ? 'bg-primary/5 border-primary/20' : 'bg-card border-border'} border rounded-xl px-4 py-3 mb-3 hover:bg-surface transition-colors">
       <div class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+        <div class="w-8 h-8 rounded-full {hasChecklist ? 'bg-primary/20' : 'bg-primary/10'} flex items-center justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="#0EA5E9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
         </div>
-        <span class="text-sm font-medium text-text">Fill checklist</span>
+        <div>
+          <span class="text-sm font-medium text-text">{hasChecklist ? 'Edit checklist' : 'Fill checklist'}</span>
+          {#if hasChecklist}
+            <p class="text-xs text-primary">Checklist completed ✓</p>
+          {/if}
+        </div>
       </div>
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
     </a>
 
     {#if showSkip}
-      <form method="POST" action="?/skip" use:enhance class="mb-3">
+      <form method="POST" action="?/skip{fromRoute ? '&from=route' : ''}" use:enhance class="mb-3">
         <p class="text-sm font-medium text-text mb-2">Why are you skipping?</p>
-        <textarea
-          name="skipReason"
-          bind:value={skipReason}
-          rows="2"
+        <textarea name="skipReason" bind:value={skipReason} rows="2"
           placeholder="e.g. Gate locked, no access"
           class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary resize-none mb-2"
         ></textarea>
@@ -155,8 +176,8 @@
         </div>
       </form>
     {:else}
-      <div class="flex gap-3">
-        <form method="POST" action="?/complete" use:enhance class="flex-1">
+      <div class="flex gap-3 mb-3">
+        <form method="POST" action="?/complete{fromRoute ? '&from=route' : ''}" use:enhance class="flex-1">
           <button type="submit"
             class="w-full py-3 bg-green-500 text-white text-sm font-medium rounded-xl hover:bg-green-600 transition-colors">
             Complete visit
@@ -168,12 +189,20 @@
         </button>
       </div>
     {/if}
+
+    {#if fromRoute}
+      <a href="/route"
+        class="flex items-center justify-center gap-2 w-full py-3 border border-border rounded-xl text-sm font-medium text-text hover:bg-surface transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+        Back to route
+      </a>
+    {/if}
   {/if}
 
   <!-- Completed state -->
   {#if visit.status === 'completed'}
-    <a href="/visits/{visit.id}/checklist"
-      class="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-4 py-3 hover:bg-green-100 transition-colors">
+    <a href="/visits/{visit.id}/checklist{fromRoute ? '?from=route' : ''}"
+      class="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-4 py-3 hover:bg-green-100 transition-colors mb-3">
       <div class="flex items-center gap-3">
         <div class="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -182,6 +211,12 @@
       </div>
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
     </a>
+    {#if fromRoute}
+      <a href="/route"
+        class="flex items-center justify-center gap-2 w-full py-3 border border-border rounded-xl text-sm font-medium text-text hover:bg-surface transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+        Back to route
+      </a>
+    {/if}
   {/if}
-
 </div>
