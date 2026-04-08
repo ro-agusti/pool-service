@@ -9,13 +9,13 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const today = new Date().toISOString().split('T')[0]
   const selectedDate = dateParam ?? today
 
-  // Calcular día de semana sin Date (Mon=0 ... Sun=6)
+  // Calcular día de semana sin timezone
   function dowOf(dateStr: string): number {
     const [y, m, d] = dateStr.split('-').map(Number)
     const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
     const yr = m < 3 ? y - 1 : y
     const dow = (yr + Math.floor(yr/4) - Math.floor(yr/100) + Math.floor(yr/400) + t[m-1] + d) % 7
-    return (dow + 6) % 7 // 0=Mon ... 6=Sun
+    return (dow + 6) % 7
   }
 
   function addDaysToStr(dateStr: string, days: number): string {
@@ -28,11 +28,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     return `${cy}-${String(cm).padStart(2,'0')}-${String(cd).padStart(2,'0')}`
   }
 
-  const dow = dowOf(selectedDate)
-  const mondayStr = addDaysToStr(selectedDate, -dow)
+  const mondayStr = addDaysToStr(selectedDate, -dowOf(selectedDate))
   const weekDays = Array.from({ length: 7 }, (_, i) => addDaysToStr(mondayStr, i))
 
-  // Traer visitas de toda la semana para los dots
   const { data: weekVisits } = await locals.supabase
     .from('visits')
     .select('scheduled_date')
@@ -43,7 +41,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const datesWithVisits = new Set(weekVisits?.map((v: any) => v.scheduled_date) ?? [])
   const weekDates = weekDays.map(date => ({ date, hasVisits: datesWithVisits.has(date) }))
 
-  // Visitas del día seleccionado
   const { data: visits } = await locals.supabase
     .from('visits')
     .select(`
@@ -58,7 +55,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     .eq('technician_id', locals.user!.id)
     .order('scheduled_time')
 
-  // Backlog
   const { data: backlog } = await locals.supabase
     .from('visits')
     .select(`
@@ -78,6 +74,7 @@ export const actions: Actions = {
     const form = await request.formData()
     const visitId   = form.get('visitId') as string
     const oldStatus = form.get('oldStatus') as string
+    const fromRoute = form.get('fromRoute') === 'true'
     const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
     await admin.from('visits').update({ status: 'in_progress' }).eq('id', visitId)
@@ -89,7 +86,7 @@ export const actions: Actions = {
       new_status: 'in_progress'
     })
 
-    throw redirect(303, `/visits/${visitId}`)
+    throw redirect(303, `/visits/${visitId}${fromRoute ? '?from=route' : ''}`)
   },
 
   skipVisit: async ({ request, locals }) => {
@@ -107,6 +104,21 @@ export const actions: Actions = {
       old_status: oldStatus,
       new_status: 'skipped',
       reason: skipReason
+    })
+  },
+
+  cancelVisit: async ({ request, locals }) => {
+    const form = await request.formData()
+    const visitId = form.get('visitId') as string
+    const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+    await admin.from('visits').update({ status: 'cancelled' }).eq('id', visitId)
+    await admin.from('visit_logs').insert({
+      visit_id: visitId,
+      org_id: locals.user!.org_id,
+      changed_by: locals.user!.id,
+      old_status: 'pending',
+      new_status: 'cancelled'
     })
   }
 }

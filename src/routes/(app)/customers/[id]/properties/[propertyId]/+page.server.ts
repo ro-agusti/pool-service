@@ -25,7 +25,32 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     .gte('scheduled_date', new Date().toISOString().split('T')[0])
     .order('scheduled_date')
     .limit(1)
-    .single()
+    .maybeSingle()
 
-  return { property, customer: property.customers, plans: plans ?? [], nextVisit: nextVisit ?? null }
+  // Historial de visitas
+  const { data: visitHistory } = await locals.supabase
+    .from('visits')
+    .select('id, scheduled_date, scheduled_time, status, skip_reason, type')
+    .eq('property_id', params.propertyId)
+    .order('scheduled_date', { ascending: false })
+    .limit(20)
+
+  // Ver cuáles visitas tienen checklist
+  const visitIds = (visitHistory ?? []).map((v: any) => v.id)
+  let checklistIds = new Set<string>()
+  if (visitIds.length > 0) {
+    const { data: checklists } = await locals.supabase
+      .from('visit_checklists')
+      .select('visit_id')
+      .in('visit_id', visitIds)
+    checklistIds = new Set((checklists ?? []).map((c: any) => c.visit_id))
+  }
+
+  return {
+    property,
+    customer: property.customers,
+    plans: plans ?? [],
+    nextVisit: nextVisit ?? null,
+    visitHistory: (visitHistory ?? []).map((v: any) => ({ ...v, hasChecklist: checklistIds.has(v.id) }))
+  }
 }

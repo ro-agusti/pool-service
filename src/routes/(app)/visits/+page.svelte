@@ -187,7 +187,7 @@
     <div class="bg-card border border-border rounded-xl overflow-hidden">
       {#each backlog as visit, i}
         <div class="px-4 py-3 {i !== 0 ? 'border-t border-border' : ''}">
-          <div class="flex items-center justify-between gap-3">
+          <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <p class="text-sm font-medium text-text truncate">{visit.properties?.customers?.name ?? '—'}</p>
               <p class="text-xs text-muted truncate">{visit.properties?.address}</p>
@@ -196,9 +196,21 @@
                 {#if visit.skip_reason}· {visit.skip_reason}{/if}
               </p>
             </div>
-            <span class="text-xs px-2 py-0.5 rounded-full border flex-shrink-0 capitalize {statusColors[visit.status]}">
-              {visit.status}
-            </span>
+            <div class="flex items-center gap-1 flex-shrink-0">
+              <span class="text-xs px-2 py-0.5 rounded-full border capitalize {statusColors[visit.status]}">
+                {visit.status}
+              </span>
+              <form method="POST" action="?/cancelVisit" use:enhance={() => {
+                return async ({ update }) => { await update() }
+              }}>
+                <input type="hidden" name="visitId" value={visit.id} />
+                <button type="submit"
+                  class="p-1.5 text-muted hover:text-danger border border-border rounded-lg hover:bg-red-50 transition-colors"
+                  title="Cancel visit">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       {/each}
