@@ -36,6 +36,8 @@
 		"@supabase/ssr": "^0.10.0",
 		"@supabase/supabase-js": "^2.101.1",
 		"@tailwindcss/vite": "^4.2.2",
+		"jspdf": "^4.2.1",
+		"jspdf-autotable": "^5.0.7",
 		"tailwindcss": "^4.2.2"
 	}
 }

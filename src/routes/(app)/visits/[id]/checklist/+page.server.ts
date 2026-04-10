@@ -21,35 +21,37 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
     .eq('visit_id', params.id)
     .maybeSingle()
 
-  return { visit, checklist: checklist ?? null, fromRoute }
+  const { data: products } = await locals.supabase
+    .from('products')
+    .select('id, name, unit, unit_price, is_chemical')
+    .eq('org_id', locals.user!.org_id)
+    .eq('active', true)
+    .order('sort_order')
+
+  const services  = (products ?? []).filter(p => !p.is_chemical)
+  const chemicals = (products ?? []).filter(p => p.is_chemical)
+
+  return { visit, checklist: checklist ?? null, fromRoute, services, chemicals }
 }
 
 export const actions: Actions = {
-  save: async ({ request, params, locals, url }) => {
+  save: async ({ request, params, url }) => {
     const fromRoute = url.searchParams.get('from') === 'route'
     const form = await request.formData()
 
-    const general_clean = form.get('general_clean') === 'on'
-    const spin_filter   = form.get('spin_filter') === 'on'
-    const ph              = form.get('ph') ? Number(form.get('ph')) : null
-    const chlorine        = form.get('chlorine') ? Number(form.get('chlorine')) : null
-    const alkalinity      = form.get('alkalinity') ? Number(form.get('alkalinity')) : null
-    const stabiliser      = form.get('stabiliser') ? Number(form.get('stabiliser')) : null
-    const salt            = form.get('salt') ? Number(form.get('salt')) : null
+    const ph               = form.get('ph')               ? Number(form.get('ph'))               : null
+    const chlorine         = form.get('chlorine')         ? Number(form.get('chlorine'))         : null
+    const alkalinity       = form.get('alkalinity')       ? Number(form.get('alkalinity'))       : null
+    const stabiliser       = form.get('stabiliser')       ? Number(form.get('stabiliser'))       : null
+    const salt             = form.get('salt')             ? Number(form.get('salt'))             : null
     const calcium_hardness = form.get('calcium_hardness') ? Number(form.get('calcium_hardness')) : null
-    const notes         = form.get('notes') as string | null
-    const photosRaw     = form.get('photos') as string
-    const photos        = photosRaw ? JSON.parse(photosRaw) : []
-
-    const chemicals: { name: string; amount: string; unit: string }[] = []
-    let i = 0
-    while (form.get(`chemical_name_${i}`) !== null) {
-      const name = form.get(`chemical_name_${i}`) as string
-      const amount = form.get(`chemical_amount_${i}`) as string
-      const unit = form.get(`chemical_unit_${i}`) as string
-      if (name?.trim()) chemicals.push({ name, amount, unit })
-      i++
-    }
+    const notes            = form.get('notes') as string | null
+    const photosRaw        = form.get('photos') as string
+    const photos           = photosRaw ? JSON.parse(photosRaw) : []
+    const tasksRaw         = form.get('tasks_completed') as string
+    const tasks_completed  = tasksRaw ? JSON.parse(tasksRaw) : []
+    const chemicalsRaw     = form.get('chemicals_added') as string
+    const chemicals_added  = chemicalsRaw ? JSON.parse(chemicalsRaw) : []
 
     const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
@@ -59,20 +61,17 @@ export const actions: Actions = {
       .eq('id', params.id)
       .single()
 
-    const { error: upsertError } = await admin.from('visit_checklists').upsert({
+    await admin.from('visit_checklists').upsert({
       visit_id: params.id,
       org_id: visit?.org_id,
-      general_clean,
-      spin_filter,
       ph, chlorine, alkalinity, stabiliser, salt, calcium_hardness,
-      chemicals_added: chemicals,
+      tasks_completed,
+      chemicals_added,
       photos,
       notes,
       completed_at: new Date().toISOString()
     }, { onConflict: 'visit_id' })
 
-    console.log('upsert error:', upsertError)
-console.log('visit_id:', params.id, 'org_id:', visit?.org_id)
     throw redirect(303, `/visits/${params.id}${fromRoute ? '?from=route' : ''}`)
   }
 }
