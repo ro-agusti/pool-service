@@ -6,10 +6,9 @@ import { redirect } from '@sveltejs/kit'
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   const dateParam = url.searchParams.get('date')
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' })
   const selectedDate = dateParam ?? today
 
-  // Calcular día de semana sin timezone
   function dowOf(dateStr: string): number {
     const [y, m, d] = dateStr.split('-').map(Number)
     const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
@@ -28,6 +27,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     return `${cy}-${String(cm).padStart(2,'0')}-${String(cd).padStart(2,'0')}`
   }
 
+  // Week strip
   const mondayStr = addDaysToStr(selectedDate, -dowOf(selectedDate))
   const weekDays = Array.from({ length: 7 }, (_, i) => addDaysToStr(mondayStr, i))
 
@@ -41,6 +41,30 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const datesWithVisits = new Set(weekVisits?.map((v: any) => v.scheduled_date) ?? [])
   const weekDates = weekDays.map(date => ({ date, hasVisits: datesWithVisits.has(date) }))
 
+  // Month calendar dots
+  const [sy, sm] = selectedDate.split('-').map(Number)
+  const monthStart = `${sy}-${String(sm).padStart(2,'0')}-01`
+  const daysInMonth = [0,31,28,31,30,31,30,31,31,30,31,30,31]
+  const isLeap = (yr: number) => yr % 4 === 0 && (yr % 100 !== 0 || yr % 400 === 0)
+  const dim = daysInMonth[sm] + (sm === 2 && isLeap(sy) ? 1 : 0)
+  const monthEnd = `${sy}-${String(sm).padStart(2,'0')}-${String(dim).padStart(2,'0')}`
+
+  const { data: monthVisits } = await locals.supabase
+    .from('visits')
+    .select('scheduled_date, status')
+    .eq('technician_id', locals.user!.id)
+    .gte('scheduled_date', monthStart)
+    .lte('scheduled_date', monthEnd)
+
+  // Agrupar por fecha: { date -> { total, completed } }
+  const monthMap: Record<string, { total: number; completed: number }> = {}
+  for (const v of monthVisits ?? []) {
+    if (!monthMap[v.scheduled_date]) monthMap[v.scheduled_date] = { total: 0, completed: 0 }
+    monthMap[v.scheduled_date].total++
+    if (v.status === 'completed') monthMap[v.scheduled_date].completed++
+  }
+
+  // Visits del día seleccionado
   const { data: visits } = await locals.supabase
     .from('visits')
     .select(`
@@ -55,6 +79,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     .eq('technician_id', locals.user!.id)
     .order('scheduled_time')
 
+  // Backlog
   const { data: backlog } = await locals.supabase
     .from('visits')
     .select(`
@@ -62,11 +87,19 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       properties ( id, address, suburb, customers ( id, name ) )
     `)
     .in('status', ['pending', 'skipped'])
-    .lt('scheduled_date', selectedDate)
+    .lt('scheduled_date', today)
     .eq('technician_id', locals.user!.id)
     .order('scheduled_date')
 
-  return { visits: visits ?? [], backlog: backlog ?? [], selectedDate, today, weekDates }
+  return {
+    visits: visits ?? [],
+    backlog: backlog ?? [],
+    selectedDate,
+    today,
+    weekDates,
+    monthMap,
+    monthYear: { year: sy, month: sm }
+  }
 }
 
 export const actions: Actions = {

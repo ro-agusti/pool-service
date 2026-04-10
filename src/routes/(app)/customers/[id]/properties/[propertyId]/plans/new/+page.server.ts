@@ -61,7 +61,6 @@ export const actions: Actions = {
 
     if (error) return fail(400, { error: error.message })
 
-    // Generar visitas para las próximas 6 semanas
     await generateVisits(
       plan.id, params.propertyId, property?.org_id,
       technician_id, recurrence, preferred_day_of_week,
@@ -72,61 +71,61 @@ export const actions: Actions = {
   }
 }
 
+// ─── Helpers ───────────────────────────────────────────────
+
+function dowOf(y: number, m: number, d: number): number {
+  const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
+  const yr = m < 3 ? y - 1 : y
+  const dow = (yr + Math.floor(yr/4) - Math.floor(yr/100) + Math.floor(yr/400) + t[m-1] + d) % 7
+  return (dow + 6) % 7
+}
+
+function addDays(y: number, m: number, d: number, days: number): [number, number, number] {
+  const months = [0,31,28,31,30,31,30,31,31,30,31,30,31]
+  const isLeap = (yr: number) => yr % 4 === 0 && (yr % 100 !== 0 || yr % 400 === 0)
+  d += days
+  while (true) {
+    const dim = months[m] + (m === 2 && isLeap(y) ? 1 : 0)
+    if (d <= dim) break
+    d -= dim; m++
+    if (m > 12) { m = 1; y++ }
+  }
+  return [y, m, d]
+}
+
+function toStr(y: number, m: number, d: number): string {
+  return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+}
+
+function compareDate(ay: number, am: number, ad: number, by: number, bm: number, bd: number): number {
+  if (ay !== by) return ay - by
+  if (am !== bm) return am - bm
+  return ad - bd
+}
+
 async function generateVisits(
   planId: string, propertyId: string, orgId: string,
   technicianId: string, recurrence: string, targetDow: number,
   time: string, startDate: string, admin: any
 ) {
-  // Parsear startDate como partes — sin Date(), sin timezone
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' })
+  const [ty, tm, td] = todayStr.split('-').map(Number)
+  const [ly, lm, ld] = addDays(ty, tm, td, 42)
+
   const [sy, sm, sd] = startDate.split('-').map(Number)
+  let [cy, cm, cd] = compareDate(sy, sm, sd, ty, tm, td) >= 0
+    ? [sy, sm, sd]
+    : [ty, tm, td]
 
-  // Calcular el día de la semana de startDate (0=Mon ... 6=Sun)
-  // Usando la fórmula de Tomohiko Sakamoto, ajustada para Mon=0
-  function dowOf(y: number, m: number, d: number): number {
-    const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
-    if (m < 3) y--
-    const dow = (y + Math.floor(y/4) - Math.floor(y/100) + Math.floor(y/400) + t[m-1] + d) % 7
-    // dow: 0=Sun,1=Mon,...,6=Sat → convertir a Mon=0
-    return (dow + 6) % 7
-  }
+  const offset = (targetDow - dowOf(cy, cm, cd) + 7) % 7
+  if (offset > 0) [cy, cm, cd] = addDays(cy, cm, cd, offset)
 
-  // Avanzar días sumando a las partes de la fecha
-  function addDays(y: number, m: number, d: number, days: number): [number, number, number] {
-    // Convertir a días totales, sumar, volver a fecha
-    const months = [0,31,28,31,30,31,30,31,31,30,31,30,31]
-    const isLeap = (yr: number) => yr % 4 === 0 && (yr % 100 !== 0 || yr % 400 === 0)
-
-    d += days
-    while (true) {
-      const dim = months[m] + (m === 2 && isLeap(y) ? 1 : 0)
-      if (d <= dim) break
-      d -= dim
-      m++
-      if (m > 12) { m = 1; y++ }
-    }
-    return [y, m, d]
-  }
-
-  function toStr(y: number, m: number, d: number): string {
-    return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`
-  }
-
-  // Encontrar primer día que coincide con targetDow desde startDate
-  const startDow = dowOf(sy, sm, sd)
-  const offset = (targetDow - startDow + 7) % 7
-  let [cy, cm, cd] = addDays(sy, sm, sd, offset)
-
-  // Fecha límite: hoy + 42 días
-  const now = new Date()
-  const [ey, em, ed] = [now.getFullYear(), now.getMonth() + 1, now.getDate()]
-  const [ly, lm, ld] = addDays(ey, em, ed, 42)
+  if (compareDate(cy, cm, cd, ly, lm, ld) > 0) return
 
   const intervalDays = recurrence === 'weekly' ? 7 : recurrence === 'fortnightly' ? 14 : 28
-  const visits = []
+  const visits: any[] = []
 
-  while (
-    cy < ly || (cy === ly && cm < lm) || (cy === ly && cm === lm && cd <= ld)
-  ) {
+  while (compareDate(cy, cm, cd, ly, lm, ld) <= 0) {
     visits.push({
       org_id: orgId,
       property_id: propertyId,
