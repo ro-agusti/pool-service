@@ -2,7 +2,7 @@ import { redirect, fail } from '@sveltejs/kit'
 import type { Actions, PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ locals }) => {
-  if (locals.user) throw redirect(303, '/dashboard')
+  if (locals.user) throw redirect(303, '/')
 }
 
 export const actions: Actions = {
@@ -15,6 +15,6 @@ export const actions: Actions = {
 
     if (error) return fail(400, { error: error.message, email })
 
-    throw redirect(303, '/dashboard')
+    throw redirect(303, '/')
   }
 }
