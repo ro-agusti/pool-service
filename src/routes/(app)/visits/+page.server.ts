@@ -73,7 +73,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       properties (
         id, address, suburb, state, postcode, lat, lng,
         customers ( id, name, phone )
-      )
+      ),
+      invoices ( status )
     `)
     .eq('scheduled_date', selectedDate)
     .eq('technician_id', locals.user!.id)

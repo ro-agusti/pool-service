@@ -1,11 +1,14 @@
-import { error } from '@sveltejs/kit'
+import { error, redirect } from '@sveltejs/kit'
 import { createClient } from '@supabase/supabase-js'
 import { PUBLIC_SUPABASE_URL } from '$env/static/public'
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private'
 import type { PageServerLoad, Actions } from './$types'
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
-  const fromRoute = url.searchParams.get('from') === 'route'
+  const fromRoute   = url.searchParams.get('from') === 'route'
+  const fromCustomer = url.searchParams.get('from') === 'customer'
+    ? url.searchParams.get('propertyId')
+    : null
 
   const { data: visit } = await locals.supabase
     .from('visits')
@@ -31,16 +34,29 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
     .lt('scheduled_date', visit.scheduled_date)
     .order('scheduled_date', { ascending: false })
     .limit(1)
-    .single()
+    .maybeSingle()
 
-  // Ver si hay checklist guardado
   const { data: checklist } = await locals.supabase
     .from('visit_checklists')
     .select('id')
     .eq('visit_id', params.id)
     .maybeSingle()
 
-  return { visit, lastVisit: lastVisit ?? null, user: locals.user, fromRoute, hasChecklist: !!checklist }
+  const { data: invoice } = await locals.supabase
+    .from('invoices')
+    .select('id, status')
+    .eq('visit_id', params.id)
+    .maybeSingle()
+
+  return {
+    visit,
+    lastVisit: lastVisit ?? null,
+    user: locals.user,
+    fromRoute,
+    fromCustomer,
+    hasChecklist: !!checklist,
+    existingInvoice: invoice ?? null
+  }
 }
 
 export const actions: Actions = {
@@ -55,7 +71,6 @@ export const actions: Actions = {
       old_status: 'in_progress',
       new_status: 'completed'
     })
-    const { redirect } = await import('@sveltejs/kit')
     throw redirect(303, fromRoute ? `/visits/${params.id}?from=route` : `/visits`)
   },
 
@@ -73,7 +88,6 @@ export const actions: Actions = {
       new_status: 'skipped',
       reason: skipReason
     })
-    const { redirect } = await import('@sveltejs/kit')
     throw redirect(303, fromRoute ? `/route` : `/visits`)
   }
 }

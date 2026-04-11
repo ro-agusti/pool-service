@@ -22,15 +22,15 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     .select('id, scheduled_date, scheduled_time, status')
     .eq('property_id', params.propertyId)
     .eq('status', 'pending')
-    .gte('scheduled_date', new Date().toISOString().split('T')[0])
+    .gte('scheduled_date', new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' }))
     .order('scheduled_date')
     .limit(1)
     .maybeSingle()
 
-  // Historial de visitas
+  // Historial de visitas — incluye invoice status
   const { data: visitHistory } = await locals.supabase
     .from('visits')
-    .select('id, scheduled_date, scheduled_time, status, skip_reason, type')
+    .select('id, scheduled_date, scheduled_time, status, skip_reason, type, invoices(status)')
     .eq('property_id', params.propertyId)
     .order('scheduled_date', { ascending: false })
     .limit(20)
@@ -51,6 +51,10 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     customer: property.customers,
     plans: plans ?? [],
     nextVisit: nextVisit ?? null,
-    visitHistory: (visitHistory ?? []).map((v: any) => ({ ...v, hasChecklist: checklistIds.has(v.id) }))
+    visitHistory: (visitHistory ?? []).map((v: any) => ({
+      ...v,
+      hasChecklist: checklistIds.has(v.id),
+      invoiceStatus: v.invoices?.[0]?.status ?? null
+    }))
   }
 }

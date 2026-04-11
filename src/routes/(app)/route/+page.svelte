@@ -376,6 +376,11 @@
     </p>
   {/if}
 
+  <a href="/route/nearby-visits?date={selectedDate}"
+  class="w-full mb-4 py-2.5 flex items-center justify-center gap-2 border border-border bg-card text-sm font-medium text-text rounded-xl hover:bg-surface transition-colors">
+  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+  Find nearby visits
+</a>
   <!-- Visit list -->
   {#if orderedVisits.length === 0}
     <div class="bg-card border border-border rounded-xl p-10 text-center text-muted text-sm">

@@ -4,21 +4,25 @@
   import type { PageData } from './$types'
 
   let { data }: { data: PageData } = $props()
-  let { visit, lastVisit, hasChecklist } = $derived(data)
+  let { visit, lastVisit, hasChecklist, existingInvoice } = $derived(data)
 
   let showSkip = $state(false)
   let skipReason = $state('')
   let fromRoute = $state(false)
+  let fromCustomerResolved = $state<string | null>(null)
 
   onMount(() => {
-    // Si viene con ?from=route, guardarlo
-    if (data.fromRoute) {
-      sessionStorage.setItem(`visit_origin_${visit.id}`, 'route')
+    const from = data.fromRoute ? 'route' : data.fromCustomer ? `customer:${data.fromCustomer}` : null
+
+    if (from) {
+      sessionStorage.setItem(`visit_origin_${visit.id}`, from)
+    }
+
+    const saved = sessionStorage.getItem(`visit_origin_${visit.id}`)
+    if (saved === 'route') {
       fromRoute = true
-    } else {
-      // Leer el origen guardado
-      const saved = sessionStorage.getItem(`visit_origin_${visit.id}`)
-      fromRoute = saved === 'route'
+    } else if (saved?.startsWith('customer:')) {
+      fromCustomerResolved = saved.replace('customer:', '')
     }
   })
 
@@ -48,17 +52,26 @@
   }
 
   let equipment = $derived(visit.service_plans?.pool_equipment ?? {})
+
+  // Back link
+  let backHref = $derived(
+    fromRoute ? '/route' :
+    fromCustomerResolved
+      ? `/customers/${visit.properties?.customers?.id}/properties/${fromCustomerResolved}`
+      : '/visits'
+  )
+  let backLabel = $derived(
+    fromRoute ? '← Route' :
+    fromCustomerResolved ? '← Property' :
+    '← Visits'
+  )
 </script>
 
 <div class="max-w-2xl">
   <!-- Header -->
   <div class="mb-4">
     <div class="flex items-center gap-3 mb-2">
-      {#if fromRoute}
-        <a href="/route" class="text-sm text-muted hover:text-text transition-colors">← Route</a>
-      {:else}
-        <a href="/visits" class="text-sm text-muted hover:text-text transition-colors">← Visits</a>
-      {/if}
+      <a href={backHref} class="text-sm text-muted hover:text-text transition-colors">{backLabel}</a>
     </div>
     <div class="flex items-start justify-between">
       <div>
@@ -123,7 +136,7 @@
 
   <!-- Contact -->
   {#if visit.properties?.customers?.phone || visit.properties?.customers?.email}
-    <div class="bg-card border border-border rounded-xl divide-y divide-border mb-6">
+    <div class="bg-card border border-border rounded-xl divide-y divide-border mb-4">
       {#if visit.properties.customers.phone}
         <a href="tel:{visit.properties.customers.phone}" class="px-4 py-3 flex items-center gap-3 hover:bg-surface transition-colors">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.64 3.43 2 2 0 0 1 3.6 1.25h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.06 6.06l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
@@ -138,6 +151,48 @@
       {/if}
     </div>
   {/if}
+
+  <!-- Invoice button -->
+  <div class="mb-4">
+    {#if existingInvoice}
+      <a href="/visits/{visit.id}/invoice"
+        class="flex items-center justify-between bg-card border border-border rounded-xl px-4 py-3 hover:bg-surface transition-colors">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </div>
+          <div>
+            <span class="text-sm font-medium text-text">View invoice</span>
+            <p class="text-xs text-muted capitalize">{existingInvoice.status}</p>
+          </div>
+        </div>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+    {:else if visit.status === 'completed' && hasChecklist}
+      <a href="/visits/{visit.id}/invoice"
+        class="flex items-center justify-between bg-card border border-border rounded-xl px-4 py-3 hover:bg-surface transition-colors">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </div>
+          <span class="text-sm font-medium text-text">Create invoice</span>
+        </div>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+    {:else}
+      <div class="flex items-center gap-3 bg-card border border-border rounded-xl px-4 py-3 opacity-50">
+        <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </div>
+        <div>
+          <span class="text-sm font-medium text-text">Create invoice</span>
+          <p class="text-xs text-muted">
+            {#if visit.status !== 'completed'}Complete the visit first{:else}Fill the checklist first{/if}
+          </p>
+        </div>
+      </div>
+    {/if}
+  </div>
 
   <!-- Actions (solo si in_progress) -->
   {#if visit.status === 'in_progress'}

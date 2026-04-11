@@ -267,9 +267,17 @@
                     {#if visit.service_plans}<p class="text-xs text-primary mt-0.5">{formatRecurrence(visit.service_plans)}</p>{/if}
                     {#if visit.scheduled_time}<p class="text-xs text-muted mt-1">{formatTime(visit.scheduled_time)}</p>{/if}
                   </div>
-                  <span class="text-xs px-2 py-0.5 rounded-full border flex-shrink-0 capitalize {statusColors[visit.status]}">
-                    {visit.status.replace('_', ' ')}
-                  </span>
+                  <div class="flex flex-col items-end gap-1 flex-shrink-0">
+                    <span class="text-xs px-2 py-0.5 rounded-full border capitalize {statusColors[visit.status]}">
+                      {visit.status.replace('_', ' ')}
+                    </span>
+                    {#if visit.invoices?.[0]}
+                      <span class="text-xs px-2 py-0.5 rounded-full border capitalize
+                        {visit.invoices[0].status === 'paid' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-amber-50 text-amber-600 border-amber-200'}">
+                        $ {visit.invoices[0].status}
+                      </span>
+                    {/if}
+                  </div>
                 </div>
               </a>
             {:else}
@@ -281,9 +289,17 @@
                     {#if visit.service_plans}<p class="text-xs text-primary mt-0.5">{formatRecurrence(visit.service_plans)}</p>{/if}
                     {#if visit.scheduled_time}<p class="text-xs text-muted mt-1">{formatTime(visit.scheduled_time)}</p>{/if}
                   </div>
-                  <span class="text-xs px-2 py-0.5 rounded-full border flex-shrink-0 capitalize {statusColors[visit.status]}">
-                    {visit.status.replace('_', ' ')}
-                  </span>
+                  <div class="flex flex-col items-end gap-1 flex-shrink-0">
+                    <span class="text-xs px-2 py-0.5 rounded-full border capitalize {statusColors[visit.status]}">
+                      {visit.status.replace('_', ' ')}
+                    </span>
+                    {#if visit.invoices?.[0]}
+                      <span class="text-xs px-2 py-0.5 rounded-full border capitalize
+                        {visit.invoices[0].status === 'paid' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-amber-50 text-amber-600 border-amber-200'}">
+                        $ {visit.invoices[0].status}
+                      </span>
+                    {/if}
+                  </div>
                 </div>
               </div>
             {/if}

@@ -207,7 +207,7 @@
       </button>
 
       {#if openHistory}
-        <!-- Filtros: select en mobile, tabs en desktop -->
+        <!-- Filtros -->
         <div class="mb-3">
           <select
             onchange={(e) => historyFilter = (e.target as HTMLSelectElement).value}
@@ -233,36 +233,39 @@
         {:else}
           <div class="bg-card border border-border rounded-xl overflow-hidden">
             {#each filteredHistory as visit, i}
-              <div class="px-4 py-3 {i !== 0 ? 'border-t border-border' : ''}">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0">
-                    <p class="text-sm font-medium text-text">{formatDate(visit.scheduled_date)}</p>
-                    {#if visit.scheduled_time}
-                      <p class="text-xs text-muted mt-0.5">{formatTime(visit.scheduled_time)}</p>
-                    {/if}
-                    {#if visit.skip_reason}
-                      <p class="text-xs text-muted mt-0.5 italic">"{visit.skip_reason}"</p>
-                    {/if}
-                  </div>
-                  <div class="flex items-center gap-2 flex-shrink-0">
-                    <span class="text-xs px-2 py-0.5 rounded-full border capitalize {statusColors[visit.status]}">
-                      {visit.status.replace('_', ' ')}
-                    </span>
-                    {#if visit.hasChecklist}
-                      <a href="/visits/{visit.id}/checklist/view"
-                        class="p-1.5 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
-                        title="View checklist">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                      </a>
-                    {/if}
-                  </div>
+              <a href="/visits/{visit.id}?from=customer&propertyId={property.id}"
+                class="flex items-start justify-between gap-3 px-4 py-3 hover:bg-surface transition-colors {i !== 0 ? 'border-t border-border' : ''}">
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-text">{formatDate(visit.scheduled_date)}</p>
+                  {#if visit.scheduled_time}
+                    <p class="text-xs text-muted mt-0.5">{formatTime(visit.scheduled_time)}</p>
+                  {/if}
+                  {#if visit.skip_reason}
+                    <p class="text-xs text-muted mt-0.5 italic">"{visit.skip_reason}"</p>
+                  {/if}
                 </div>
-              </div>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                  {#if visit.hasChecklist}
+                    <span class="p-1.5 bg-primary/10 text-primary rounded-lg" title="Has checklist">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                    </span>
+                  {/if}
+                  {#if visit.invoiceStatus}
+                    <span class="text-xs px-2 py-0.5 rounded-full border capitalize
+                      {visit.invoiceStatus === 'paid' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-amber-50 text-amber-600 border-amber-200'}">
+                      $ {visit.invoiceStatus}
+                    </span>
+                  {/if}
+                  <span class="text-xs px-2 py-0.5 rounded-full border capitalize {statusColors[visit.status]}">
+                    {visit.status.replace('_', ' ')}
+                  </span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" class="text-muted"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+              </a>
             {/each}
           </div>
         {/if}
       {/if}
     </div>
   {/if}
-
 </div>
