@@ -5,8 +5,41 @@ import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private'
 import { redirect } from '@sveltejs/kit'
 
 export const load: PageServerLoad = async ({ locals, url }) => {
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' })
   const selectedDate = url.searchParams.get('date') ?? today
+ 
+  // Week strip
+function dowOf(dateStr: string): number {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
+  const yr = m < 3 ? y - 1 : y
+  const dow = (yr + Math.floor(yr/4) - Math.floor(yr/100) + Math.floor(yr/400) + t[m-1] + d) % 7
+  return (dow + 6) % 7
+}
+
+function addDaysToStr(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const months = [0,31,28,31,30,31,30,31,31,30,31,30,31]
+  const isLeap = (yr: number) => yr % 4 === 0 && (yr % 100 !== 0 || yr % 400 === 0)
+  let cy = y, cm = m, cd = d + days
+  while (true) { const dim = months[cm] + (cm === 2 && isLeap(cy) ? 1 : 0); if (cd <= dim) break; cd -= dim; cm++; if (cm > 12) { cm = 1; cy++ } }
+  return `${cy}-${String(cm).padStart(2,'0')}-${String(cd).padStart(2,'0')}`
+}
+
+const mondayStr = addDaysToStr(selectedDate, -dowOf(selectedDate))
+const weekDays = Array.from({ length: 7 }, (_, i) => addDaysToStr(mondayStr, i))
+
+const { data: weekVisits } = await locals.supabase
+  .from('visits')
+  .select('scheduled_date')
+  .eq('technician_id', locals.user!.id)
+  .gte('scheduled_date', weekDays[0])
+  .lte('scheduled_date', weekDays[6])
+
+const weekDates = weekDays.map(date => ({
+  date,
+  hasVisits: (weekVisits ?? []).some((v: any) => v.scheduled_date === date)
+}))
 
   const { data: visitsRaw } = await locals.supabase
     .from('visits')
@@ -70,6 +103,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     routeVisits,
     selectedDate,
     today,
+    weekDates,
     googleMapsKey: PUBLIC_GOOGLE_MAPS_KEY
   }
 }

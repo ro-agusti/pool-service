@@ -4,7 +4,8 @@
   import type { PageData } from './$types'
 
   let { data }: { data: PageData } = $props()
-  let { visits, route, routeVisits, selectedDate, today, googleMapsKey, backlog } = $derived(data)
+  let { visits, route, routeVisits, selectedDate, today, googleMapsKey, backlog, weekDates } = $derived(data)
+
 
   let map: any = null
   let markers: any[] = []
@@ -271,9 +272,50 @@
     if (latInput) latInput.value = String(originLat ?? '')
     if (lngInput) lngInput.value = String(originLng ?? '')
   }
+
+function changeWeek(offset: number) {
+  const [y, m, d] = selectedDate.split('-').map(Number)
+  const months = [0,31,28,31,30,31,30,31,31,30,31,30,31]
+  const isLeap = (yr: number) => yr % 4 === 0 && (yr % 100 !== 0 || yr % 400 === 0)
+  let cy = y, cm = m, cd = d + offset * 7
+  while (cd < 1) { cm--; if (cm < 1) { cm = 12; cy-- } cd += months[cm] + (cm === 2 && isLeap(cy) ? 1 : 0) }
+  while (true) { const dim = months[cm] + (cm === 2 && isLeap(cy) ? 1 : 0); if (cd <= dim) break; cd -= dim; cm++; if (cm > 12) { cm = 1; cy++ } }
+  const newDate = `${cy}-${String(cm).padStart(2,'0')}-${String(cd).padStart(2,'0')}`
+  window.location.href = `/route?date=${newDate}`
+}
+
 </script>
 
 <div class="max-w-2xl">
+
+  <div class="bg-card border border-border rounded-xl mb-4 overflow-hidden">
+    <div class="flex items-center justify-between px-4 py-2 border-b border-border">
+      <button onclick={() => changeWeek(-1)} class="p-1 text-muted hover:text-text transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <p class="text-sm font-medium text-text">
+        {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })}
+      </p>
+      <button onclick={() => changeWeek(1)} class="p-1 text-muted hover:text-text transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
+    <div class="grid grid-cols-7 px-2 py-2">
+      {#each weekDates as wd, i}
+        {@const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']}
+        <a href="/route?date={wd.date}"
+          class="flex flex-col items-center gap-1 py-1.5 rounded-lg transition-colors
+            {wd.date === selectedDate ? 'bg-primary' : 'hover:bg-surface'}">
+          <span class="text-xs {wd.date === selectedDate ? 'text-white' : 'text-muted'}">{days[i]}</span>
+          <span class="text-sm font-medium {wd.date === selectedDate ? 'text-white' : wd.date === today ? 'text-primary' : 'text-text'}">
+            {Number(wd.date.split('-')[2])}
+          </span>
+          <span class="w-1 h-1 rounded-full {wd.hasVisits ? (wd.date === selectedDate ? 'bg-white' : 'bg-primary') : 'bg-transparent'}"></span>
+        </a>
+      {/each}
+    </div>
+  </div>
+
   <!-- Header -->
   <div class="mb-4">
     <h1 class="text-2xl font-semibold text-text">Route</h1>
