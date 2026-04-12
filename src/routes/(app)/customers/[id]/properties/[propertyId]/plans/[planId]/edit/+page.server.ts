@@ -19,7 +19,13 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     .eq('id', params.propertyId)
     .single()
 
-  return { plan, property, customer: property?.customers }
+  const { data: technicians } = await locals.supabase
+    .from('users')
+    .select('id, name')
+    .eq('org_id', property?.org_id)
+    .eq('role', 'technician')
+
+  return { plan, property, customer: property?.customers, technicians: technicians ?? [] }
 }
 
 export const actions: Actions = {
@@ -28,6 +34,7 @@ export const actions: Actions = {
     const recurrence            = form.get('recurrence') as string
     const preferred_day_of_week = Number(form.get('preferred_day_of_week'))
     const preferred_time        = form.get('preferred_time') as string
+    const technician_id         = form.get('technician_id') as string
     const active                = form.get('active') === 'true'
     const notes                 = form.get('notes') as string | null
     const pool_equipment = {
@@ -40,7 +47,7 @@ export const actions: Actions = {
 
     const { error: err } = await admin
       .from('service_plans')
-      .update({ recurrence, preferred_day_of_week, preferred_time, active, notes, pool_equipment })
+      .update({ recurrence, preferred_day_of_week, preferred_time, active, notes, pool_equipment, technician_id })
       .eq('id', params.planId)
 
     if (err) return fail(400, { error: err.message })
