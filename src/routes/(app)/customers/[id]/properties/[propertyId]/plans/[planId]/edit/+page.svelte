@@ -84,6 +84,18 @@
           </div>
         </div>
 
+        {#if data.technicians.length > 0}
+  <div>
+    <label for="technician_id" class="block text-sm font-medium text-text mb-1">Technician</label>
+    <select id="technician_id" name="technician_id" required
+      class="w-full px-3 py-2 rounded-lg border border-border bg-white text-text text-sm
+             focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+      {#each data.technicians as tech}
+        <option value={tech.id} selected={plan.technician_id === tech.id}>{tech.name}</option>
+      {/each}
+    </select>
+  </div>
+{/if}
         <div>
           <label for="notes" class="block text-sm font-medium text-text mb-1">Notes</label>
           <textarea id="notes" name="notes" rows="2"
