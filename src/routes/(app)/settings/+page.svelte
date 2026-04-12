@@ -8,7 +8,7 @@
 
   <div class="bg-card border border-border rounded-xl overflow-hidden">
     <a href="/settings/products"
-      class="flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors">
+      class="flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors border-b border-border">
       <div class="flex items-center gap-3">
         <div class="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -16,6 +16,19 @@
         <div>
           <p class="text-sm font-medium text-text">Products & Pricing</p>
           <p class="text-xs text-muted">Services and chemicals with unit prices</p>
+        </div>
+      </div>
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+    </a>
+    <a href="/settings/team"
+      class="flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-violet-50 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <div>
+          <p class="text-sm font-medium text-text">Team</p>
+          <p class="text-xs text-muted">Manage technicians in your organisation</p>
         </div>
       </div>
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>

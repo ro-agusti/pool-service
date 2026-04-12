@@ -13,13 +13,38 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 
   if (!customer) throw error(404, 'Customer not found')
 
-  const { data: properties } = await locals.supabase
-    .from('properties')
-    .select('id, address, suburb, state, postcode, pool_type, pool_volume_litres')
-    .eq('customer_id', params.id)
-    .order('address')
+  const isAdmin = locals.user?.role === 'admin'
 
-  return { customer, properties: properties ?? [] }
+  let properties: any[] = []
+
+  if (isAdmin) {
+    const { data } = await locals.supabase
+      .from('properties')
+      .select('id, address, suburb, state, postcode, pool_type, pool_volume_litres')
+      .eq('customer_id', params.id)
+      .order('address')
+    properties = data ?? []
+  } else {
+    // Técnico — solo propiedades con visitas suyas
+    const { data: visits } = await locals.supabase
+      .from('visits')
+      .select('property_id')
+      .eq('technician_id', locals.user!.id)
+
+    const propertyIds = [...new Set((visits ?? []).map((v: any) => v.property_id).filter(Boolean))]
+
+    if (propertyIds.length > 0) {
+      const { data } = await locals.supabase
+        .from('properties')
+        .select('id, address, suburb, state, postcode, pool_type, pool_volume_litres')
+        .eq('customer_id', params.id)
+        .in('id', propertyIds)
+        .order('address')
+      properties = data ?? []
+    }
+  }
+
+  return { customer, properties }
 }
 
 export const actions: Actions = {
@@ -29,7 +54,6 @@ export const actions: Actions = {
     const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     await admin.from('properties').delete().eq('id', propertyId)
   },
-
   deleteCustomer: async ({ params }) => {
     const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     await admin.from('customers').delete().eq('id', params.id)
