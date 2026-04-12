@@ -1,11 +1,14 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
   import type { PageData } from './$types'
+  import { page } from '$app/stores'
 
   let { data }: { data: PageData } = $props()
 
   let search = $state(data.search)
   let debounce: ReturnType<typeof setTimeout>
+
+      let isAdmin = $derived($page.data.user?.role === 'admin')
 
   function onSearch(e: Event) {
     search = (e.target as HTMLInputElement).value
@@ -21,12 +24,12 @@
     <h1 class="text-2xl font-semibold text-text">Customers</h1>
     <p class="text-sm text-muted">{data.customers.length} total</p>
   </div>
-  <a
-    href="/customers/new"
-    class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors"
-  >
+  {#if isAdmin}
+  <a href="/customers/new"
+    class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors">
     + New customer
   </a>
+{/if}
 </div>
 
 <!-- Search -->
