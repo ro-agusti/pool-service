@@ -78,16 +78,17 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
       .eq('property_id', visit.property_id)
       .eq('status', 'completed')
       .neq('id', params.id)
+      .lt('scheduled_date', visit.scheduled_date)
       .order('scheduled_date', { ascending: false })
       .limit(3)
 
     // Supabase returns visit_checklists as object (1-to-1), not array — normalize it
-visitHistory = (history ?? [])
-  .map((v) => ({
-    ...v,
-    visit_checklists: v.visit_checklists ? [v.visit_checklists as any] : [],
-  }))
-  .filter((v) => v.visit_checklists.length > 0)
+    visitHistory = (history ?? [])
+      .map((v) => ({
+        ...v,
+        visit_checklists: v.visit_checklists ? [v.visit_checklists as any] : [],
+      }))
+      .filter((v) => v.visit_checklists.length > 0)
   }
 
   const { data: invoice } = await locals.supabase
