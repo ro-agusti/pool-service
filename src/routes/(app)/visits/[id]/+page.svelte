@@ -64,7 +64,6 @@
     '← Visits'
   )
 
-  // ─── Water test parameters with ranges ───
   const waterParams = [
     { key: 'ph',               label: 'pH',          unit: '',    min: 7.2,  max: 7.6 },
     { key: 'chlorine',         label: 'Chlorine',    unit: 'ppm', min: 1,    max: 3 },
@@ -81,8 +80,7 @@
     return 'ok'
   }
 
-  // ─── Trend chart helpers ───
-  // Build timeline: [oldest history...history, current visit] in chronological order
+  // Trend: oldest → current, chronological
   let trendPoints = $derived(
     !checklist || !visitHistory
       ? []
@@ -96,76 +94,26 @@
         ]
   )
 
-  // For a given metric, build chart path data (SVG)
-  function buildSparkline(
-    points: typeof trendPoints,
-    key: string,
-    width: number,
-    height: number
-  ): { path: string; dots: Array<{ x: number; y: number; val: number | null; isCurrent: boolean }> } {
-    const vals = points.map((p) => (p.cl ? (p.cl as any)[key] : null) as number | null)
-    const defined = vals.filter((v) => v != null) as number[]
-    if (defined.length < 2) return { path: '', dots: [] }
-
-    const minV = Math.min(...defined)
-    const maxV = Math.max(...defined)
-    const range = maxV - minV || 1
-    const pad = 8
-
-    const xs = points.map((_, i) => pad + (i / (points.length - 1)) * (width - pad * 2))
-    const ys = vals.map((v) =>
-      v != null ? height - pad - ((v - minV) / range) * (height - pad * 2) : null
-    )
-
-    const pathParts: string[] = []
-    let started = false
-    for (let i = 0; i < xs.length; i++) {
-      if (ys[i] == null) { started = false; continue }
-      pathParts.push(started ? `L ${xs[i].toFixed(1)} ${ys[i]!.toFixed(1)}` : `M ${xs[i].toFixed(1)} ${ys[i]!.toFixed(1)}`)
-      started = true
-    }
-
-    const dots = points.map((p, i) => ({
-      x: xs[i],
-      y: ys[i] ?? 0,
-      val: vals[i],
-      isCurrent: p.isCurrent,
-    })).filter((d) => d.val != null)
-
-    return { path: pathParts.join(' '), dots }
-  }
-
-  // Which params have enough data to show a trend (≥2 points with values)
-  let trendableParams = $derived(
-    trendPoints.length < 2
-      ? []
-      : waterParams.filter((p) => {
-          const vals = trendPoints.map((tp) => (tp.cl ? (tp.cl as any)[p.key] : null))
-          return vals.filter((v) => v != null).length >= 2
-        })
-  )
+  let hasTrend = $derived(trendPoints.length >= 2)
 
   type TrendAlert = { label: string; direction: 'high' | 'low'; count: number }
-  let trendAlerts = $derived(
-    trendPoints.length < 2
-      ? ([] as TrendAlert[])
-      : waterParams.reduce((alerts: TrendAlert[], p) => {
-          const recent = trendPoints.slice(-3)
-          const statuses = recent.map((tp) => getStatus((tp.cl as any)?.[p.key] ?? null, p.min, p.max))
-          const highCount = statuses.filter((s) => s === 'high').length
-          const lowCount  = statuses.filter((s) => s === 'low').length
-          if (highCount >= 2 && statuses[statuses.length - 1] === 'high') {
-            alerts.push({ label: p.label, direction: 'high', count: highCount })
-          } else if (lowCount >= 2 && statuses[statuses.length - 1] === 'low') {
-            alerts.push({ label: p.label, direction: 'low', count: lowCount })
-          }
-          return alerts
-        }, [])
-  )
-
-  // SVG chart dimensions
-  const CHART_W = 280
-  const CHART_H = 64
+let trendAlerts = $derived(
+  !hasTrend
+    ? ([] as TrendAlert[])
+    : waterParams.reduce((alerts: TrendAlert[], p) => {
+        const statuses = trendPoints.map((tp) => getStatus((tp.cl as any)?.[p.key] ?? null, p.min, p.max))
+        const last = statuses[statuses.length - 1]
+        if (last !== 'high' && last !== 'low') return alerts
+        // Contar desde el final cuántas consecutivas tienen el mismo status
+        let count = 0
+        for (let i = statuses.length - 1; i >= 0; i--) {
+          if (statuses[i] === last) count++
+          else break
+        }
+        if (count >= 2) alerts.push({ label: p.label, direction: last, count })
+        return alerts
+      }, [])
+)
 </script>
 
 <div class="max-w-2xl">
@@ -197,12 +145,9 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- COMPLETED SUMMARY (shown when visit is done and has checklist) -->
-  <!-- ═══════════════════════════════════════════ -->
   {#if visit.status === 'completed' && checklist}
 
-    <!-- Water test grid -->
+    <!-- Water analysis grid -->
     <p class="text-xs font-medium text-muted uppercase tracking-wider mb-2">Water analysis</p>
     <div class="grid grid-cols-3 gap-2 mb-4">
       {#each waterParams as param}
@@ -221,81 +166,68 @@
       {/each}
     </div>
 
-    <!-- Trend chart (only if ≥1 previous completed visit with water data) -->
-    {#if trendPoints.length >= 2 && trendableParams.length > 0}
-      <div class="bg-card border border-border rounded-xl p-4 mb-4">
-        <p class="text-xs font-medium text-muted uppercase tracking-wider mb-3">Trend — last {trendPoints.length} visits</p>
+    <!-- Trend table -->
+    {#if hasTrend}
+      <p class="text-xs font-medium text-muted uppercase tracking-wider mb-2">
+        Trend — last {trendPoints.length} visits
+      </p>
+      <div class="bg-card border border-border rounded-xl overflow-hidden mb-4">
 
-        <!-- Alerts -->
-        {#each trendAlerts as alert}
-          <div class="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-3 text-xs text-amber-700">
-            <span class="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0"></span>
-            {alert.label} {alert.direction === 'high' ? 'elevated' : 'low'} for {alert.count} consecutive visits
-          </div>
-        {/each}
-
-        <!-- Date labels row -->
-        <div class="flex mb-1" style="padding: 0 0px;">
-          {#each trendPoints as tp}
-            <div class="flex-1 text-center">
-              <span class="text-[10px] {tp.isCurrent ? 'text-primary font-medium' : 'text-muted'}">
-                {tp.isCurrent ? 'Today' : formatDateShort(tp.date)}
-              </span>
-            </div>
-          {/each}
-        </div>
-
-        <!-- One sparkline per trendable param -->
-        <div class="space-y-3">
-          {#each trendableParams as param}
-            {@const spark = buildSparkline(trendPoints, param.key, CHART_W, CHART_H)}
-            {#if spark.path}
-              <div>
-                <p class="text-xs text-muted mb-1">{param.label}{param.unit ? ` (${param.unit})` : ''}</p>
-                <div class="overflow-hidden rounded-lg bg-surface" style="height: {CHART_H}px;">
-                  <svg viewBox="0 0 {CHART_W} {CHART_H}" width="100%" height={CHART_H} preserveAspectRatio="none">
-                    <!-- Range band -->
-                    <rect
-                      x="0" y="0" width={CHART_W} height={CHART_H}
-                      fill="transparent"
-                    />
-                    <!-- Line -->
-                    <path
-                      d={spark.path}
-                      fill="none"
-                      stroke="#94a3b8"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                    <!-- Dots -->
-                    {#each spark.dots as dot}
-                      {@const s = getStatus(dot.val, param.min, param.max)}
-                      <circle
-                        cx={dot.x}
-                        cy={dot.y}
-                        r={dot.isCurrent ? 4 : 3}
-                        fill={dot.isCurrent ? '#0EA5E9' : (s === 'ok' ? '#22c55e' : '#f59e0b')}
-                        stroke="white"
-                        stroke-width="1.5"
-                      />
-                      <!-- Value label on current dot -->
-                      {#if dot.isCurrent}
-                        <text
-                          x={dot.x}
-                          y={dot.y - 8}
-                          text-anchor="middle"
-                          font-size="9"
-                          font-weight="600"
-                          fill="#0EA5E9"
-                        >{dot.val}</text>
-                      {/if}
-                    {/each}
-                  </svg>
-                </div>
+        {#if trendAlerts.length > 0}
+          <div class="px-4 pt-3 space-y-2">
+            {#each trendAlerts as alert}
+              <div class="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-xs text-amber-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0"></span>
+                {alert.label} {alert.direction === 'high' ? 'elevated' : 'low'} for {alert.count} consecutive visits
               </div>
-            {/if}
-          {/each}
+            {/each}
+          </div>
+        {/if}
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm" style="min-width: 260px;">
+            <thead>
+              <tr class="border-b border-border">
+                <th class="text-left px-4 py-2.5 text-xs font-medium text-muted"></th>
+                {#each trendPoints as tp}
+                  <th class="text-right px-3 py-2.5 text-xs font-medium {tp.isCurrent ? 'text-primary' : 'text-muted'} whitespace-nowrap">
+                    {tp.isCurrent ? 'Today' : formatDateShort(tp.date)}
+                  </th>
+                {/each}
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {#each waterParams as param}
+                {@const hasAnyVal = trendPoints.some(tp => (tp.cl as any)?.[param.key] != null)}
+                {#if hasAnyVal}
+                  <tr>
+                    <td class="px-4 py-2.5 text-xs text-muted whitespace-nowrap">{param.label}</td>
+                    {#each trendPoints as tp}
+                      {@const val = (tp.cl as any)?.[param.key] ?? null}
+                      {@const status = getStatus(val, param.min, param.max)}
+                      <td class="px-3 py-2.5 text-right whitespace-nowrap">
+  {#if val != null}
+    <span class="text-xs font-medium
+      {status === 'ok'    ? (tp.isCurrent ? 'text-green-600' : 'text-green-500') :
+       status === 'high'  ? 'text-red-500' :
+       status === 'low'   ? 'text-amber-500' : 'text-text'}">
+      {val}
+    </span>
+    {#if status === 'high'}
+      <span class="text-red-400 text-[10px] ml-0.5">↑</span>
+    {:else if status === 'low'}
+      <span class="text-amber-400 text-[10px] ml-0.5">↓</span>
+    {/if}
+  {:else}
+    <span class="text-muted text-xs">—</span>
+  {/if}
+</td>
+                    {/each}
+                  </tr>
+                {/if}
+              {/each}
+            </tbody>
+          </table>
         </div>
       </div>
     {/if}
@@ -355,11 +287,9 @@
       Edit checklist
     </a>
 
-    <!-- Divider before the rest -->
     <div class="border-t border-border mb-4"></div>
 
   {:else if visit.status === 'in_progress' || visit.status === 'completed'}
-    <!-- Last visit banner (only shown when no checklist summary above) -->
     {#if lastVisit}
       <a href="/visits/{lastVisit.id}/checklist/view"
         class="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-4 hover:bg-blue-100 transition-colors">
@@ -408,7 +338,7 @@
         </a>
       {/if}
       {#if visit.properties.customers.email}
-        <a href="/cdn-cgi/l/email-protection#176c617e647e6339676578677265637e72643974626463787a72656439727a767e7b6a" class="px-4 py-3 flex items-center gap-3 hover:bg-surface transition-colors">
+        <a href="mailto:{visit.properties.customers.email}" class="px-4 py-3 flex items-center gap-3 hover:bg-surface transition-colors">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
           <span class="text-sm text-text">{visit.properties.customers.email}</span>
         </a>
@@ -416,7 +346,7 @@
     </div>
   {/if}
 
-  <!-- Invoice button -->
+  <!-- Invoice -->
   <div class="mb-4">
     {#if existingInvoice}
       <a href="/visits/{visit.id}/invoice"
@@ -518,7 +448,7 @@
     {/if}
   {/if}
 
-  <!-- Completed — back to route link -->
+  <!-- Completed — back to route -->
   {#if visit.status === 'completed' && fromRoute}
     <a href="/route"
       class="flex items-center justify-center gap-2 w-full py-3 border border-border rounded-xl text-sm font-medium text-text hover:bg-surface transition-colors mt-2">
