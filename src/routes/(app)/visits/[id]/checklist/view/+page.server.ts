@@ -16,5 +16,13 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     .eq('visit_id', params.id)
     .maybeSingle()
 
-  return { visit, checklist: checklist ?? null }
+  const { data: products } = await locals.supabase
+    .from('products')
+    .select('id, name')
+    .eq('org_id', locals.user!.org_id)
+    .eq('active', true)
+
+  const productMap = Object.fromEntries((products ?? []).map(p => [p.id, p.name]))
+
+  return { visit, checklist: checklist ?? null, productMap }
 }
