@@ -19,34 +19,30 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 
   if (!visit) throw error(404, 'Visit not found')
 
-  // Checklist con tasks y chemicals
   const { data: checklist } = await locals.supabase
     .from('visit_checklists')
     .select('tasks_completed, chemicals_added')
     .eq('visit_id', params.id)
     .maybeSingle()
 
-  // Productos para resolver nombres de tasks (por id)
   const { data: products } = await locals.supabase
     .from('products')
     .select('id, name, unit_price, unit, is_chemical')
     .eq('org_id', locals.user!.org_id)
 
-  // Org info para el PDF
-  const { data: org } = await locals.supabase
-    .from('organizations')
-    .select('name, email, logo_url')
-    .eq('id', locals.user!.org_id)
-    .single()
+  // Use org_settings instead of organizations
+  const { data: orgSettings } = await locals.supabase
+    .from('org_settings')
+    .select('*')
+    .eq('org_id', locals.user!.org_id)
+    .maybeSingle()
 
-  // Invoice existente
   const { data: invoice } = await locals.supabase
     .from('invoices')
     .select('*')
     .eq('visit_id', params.id)
     .maybeSingle()
 
-  // Calcular líneas del invoice
   const productMap = new Map((products ?? []).map(p => [p.id, p]))
 
   const serviceLines = (checklist?.tasks_completed ?? [])
@@ -70,13 +66,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
   const lines = [...serviceLines, ...chemicalLines]
   const total = lines.reduce((sum, l) => sum + l!.total, 0)
 
-  return {
-    visit,
-    org,
-    invoice: invoice ?? null,
-    lines,
-    total
-  }
+  return { visit, orgSettings: orgSettings ?? null, invoice: invoice ?? null, lines, total }
 }
 
 export const actions: Actions = {
@@ -88,13 +78,21 @@ export const actions: Actions = {
       .select('id')
       .eq('visit_id', params.id)
       .maybeSingle()
-
     if (existing) throw redirect(303, `/visits/${params.id}/invoice`)
+
+    // Calculate next invoice number for this org
+    const { count } = await admin
+      .from('invoices')
+      .select('*', { count: 'exact', head: true })
+      .eq('org_id', locals.user!.org_id)
+
+    const invoice_number = 1000001 + (count ?? 0)
 
     await admin.from('invoices').insert({
       org_id: locals.user!.org_id,
       visit_id: params.id,
-      status: 'pending'
+      status: 'pending',
+      invoice_number,
     })
 
     throw redirect(303, `/visits/${params.id}/invoice`)
