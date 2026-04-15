@@ -7,6 +7,19 @@
   <h1 class="text-xl font-semibold text-text mb-6">Settings</h1>
 
   <div class="bg-card border border-border rounded-xl overflow-hidden">
+    <a href="/settings/business"
+      class="flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors border-b border-border">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-sky-50 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </div>
+        <div>
+          <p class="text-sm font-medium text-text">Business details</p>
+          <p class="text-xs text-muted">Name, ABN, contact info and logo</p>
+        </div>
+      </div>
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+    </a>
     <a href="/settings/products"
       class="flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors border-b border-border">
       <div class="flex items-center gap-3">

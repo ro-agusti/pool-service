@@ -6,97 +6,71 @@
   import type { PageData } from './$types'
 
   let { data }: { data: PageData } = $props()
-  let { visit, checklist, fromRoute: fr, services, chemicals: chemicalProducts } = $derived(data)
+let { visit, checklist, visitHistory, fromRoute: fr, services, chemicals: chemicalProducts } = $derived(data)
 
   let fromRoute = $state(false)
   let loading = $state(false)
-  let loadingAI = $state(false)
-  let recommendations = $state<any[]>([])
-  let aiError = $state('')
+  let openChemicals = $state(true)
 
-  let openWaterTest       = $state(true)
-  let openRecommendations = $state(false)
-  let openChemicals       = $state(true)
-
-  // Tasks — set of product ids that are checked
+  // Tasks
   let tasksChecked = $state<Set<string>>(new Set())
 
-  // Chemicals — { product_id, name, unit, unit_price, amount }
+  // Chemicals
   type ChemLine = { product_id: string; name: string; unit: string; unit_price: number; amount: string }
   let chemLines = $state<ChemLine[]>([])
+
+  // Applied checkboxes — which recommendations the tech marked as done
+  let appliedRecs = $state<Set<string>>(new Set())
 
   onMount(() => {
     fromRoute = fr || sessionStorage.getItem(`visit_origin_${visit.id}`) === 'route'
     if (fr) sessionStorage.setItem(`visit_origin_${visit.id}`, 'route')
 
-    // Restore tasks from saved checklist
     if (checklist?.tasks_completed?.length) {
       tasksChecked = new Set(checklist.tasks_completed)
     }
 
-    // Siempre mostrar todos los chemicals del catálogo
-    // con las cantidades guardadas donde corresponda
     const savedChemicals: any[] = checklist?.chemicals_added ?? []
     const savedMap = new Map(savedChemicals.map((c: any) => [c.product_id, c]))
-
-    chemLines = chemicalProducts.map(p => {
+    
+    chemLines = chemicalProducts.map((p: any) => {
       const saved = savedMap.get(p.id)
-      return {
-        product_id: p.id,
-        name: p.name,
-        unit: p.unit,
-        unit_price: p.unit_price,
-        amount: saved ? String(saved.amount) : ''
-      }
+      return { product_id: p.id, name: p.name, unit: p.unit, unit_price: p.unit_price, amount: saved ? String(saved.amount) : '' }
     })
 
-    // Agregar customs (sin product_id) que estaban guardados
     const customs = savedChemicals.filter((c: any) => !c.product_id)
     chemLines = [...chemLines, ...customs.map((c: any) => ({
-      product_id: '',
-      name: c.name,
-      unit: c.unit,
-      unit_price: c.unit_price ?? 0,
-      amount: String(c.amount)
+      product_id: '', name: c.name, unit: c.unit, unit_price: c.unit_price ?? 0, amount: String(c.amount)
     }))]
   })
 
   function toggleTask(id: string) {
     const s = new Set(tasksChecked)
-    if (s.has(id)) s.delete(id)
-    else s.add(id)
+    if (s.has(id)) { s.delete(id) } else { s.add(id) }
     tasksChecked = s
   }
 
   function addCustomChemical() {
     chemLines = [...chemLines, { product_id: '', name: '', unit: 'L', unit_price: 0, amount: '' }]
   }
-  function removeChemLine(i: number) {
-    chemLines = chemLines.filter((_, idx) => idx !== i)
-  }
+  function removeChemLine(i: number) { chemLines = chemLines.filter((_, idx) => idx !== i) }
 
-  // Totals
   let servicesTotal = $derived(
-    services
-      .filter(s => tasksChecked.has(s.id))
-      .reduce((sum, s) => sum + s.unit_price, 0)
+    services.filter((s: any) => tasksChecked.has(s.id)).reduce((sum: number, s: any) => sum + s.unit_price, 0)
   )
   let chemicalsTotal = $derived(
-    chemLines.reduce((sum, c) => {
-      const amt = parseFloat(c.amount)
-      return sum + (isNaN(amt) ? 0 : amt * c.unit_price)
-    }, 0)
+    chemLines.reduce((sum, c) => { const a = parseFloat(c.amount); return sum + (isNaN(a) ? 0 : a * c.unit_price) }, 0)
   )
   let grandTotal = $derived(servicesTotal + chemicalsTotal)
 
-  // Water test
+  // ─── Water params — contextualized placeholders and steps ───
   const waterParams = [
-    { name: 'ph',               label: 'pH',               min: 7.2,  max: 7.6,   step: '0.1', unit: '' },
-    { name: 'chlorine',         label: 'Free chlorine',    min: 1,    max: 3,     step: '0.1', unit: 'ppm' },
-    { name: 'alkalinity',       label: 'Alkalinity',       min: 80,   max: 120,   step: '1',   unit: 'ppm' },
-    { name: 'stabiliser',       label: 'Stabiliser (CYA)', min: 30,   max: 50,    step: '1',   unit: 'ppm' },
-    { name: 'salt',             label: 'Salt',             min: 3000, max: 4500,  step: '10',  unit: 'ppm' },
-    { name: 'calcium_hardness', label: 'Calcium hardness', min: 200,  max: 400,   step: '1',   unit: 'ppm' },
+    { name: 'ph',               label: 'pH',               min: 7.2,  max: 7.6,  ideal: 7.4,  step: '0.1',  unit: '',    placeholder: '7.4' },
+    { name: 'chlorine',         label: 'Free chlorine',    min: 1,    max: 3,    ideal: 2,    step: '0.1',  unit: 'ppm', placeholder: '2' },
+    { name: 'alkalinity',       label: 'Alkalinity',       min: 80,   max: 120,  ideal: 100,  step: '1',    unit: 'ppm', placeholder: '100' },
+    { name: 'stabiliser',       label: 'Stabiliser (CYA)', min: 30,   max: 50,   ideal: 40,   step: '1',    unit: 'ppm', placeholder: '40' },
+    { name: 'salt',             label: 'Salt',             min: 3000, max: 4500, ideal: 3750, step: '50',   unit: 'ppm', placeholder: '3750' },
+    { name: 'calcium_hardness', label: 'Calcium hardness', min: 200,  max: 400,  ideal: 300,  step: '5',    unit: 'ppm', placeholder: '300' },
   ]
 
   let values = $state<Record<string, string>>({
@@ -116,13 +90,232 @@
     return 'ok'
   }
 
-  const statusStyle = {
-    ok:    { bg: 'bg-green-50 border-green-300',  label: 'bg-green-100 text-green-700',  text: 'OK' },
-    low:   { bg: 'bg-amber-50 border-amber-300',  label: 'bg-amber-100 text-amber-700',  text: 'Low' },
-    high:  { bg: 'bg-red-50 border-red-300',      label: 'bg-red-100 text-red-700',      text: 'High' },
-    empty: { bg: 'bg-white border-border',         label: '',                              text: '' },
+  function formatDateShort(dateStr: string): string {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+}
+
+function getHistoryStatus(val: number | null, min: number, max: number): 'ok' | 'low' | 'high' | 'empty' {
+  if (val == null) return 'empty'
+  if (val < min) return 'low'
+  if (val > max) return 'high'
+  return 'ok'
+}
+
+let historyPoints = $derived(
+  (visitHistory ?? []).map((v: any) => ({
+    date: v.scheduled_date,
+    cl: v.visit_checklists?.[0] ?? null,
+  }))
+)
+
+type TrendAlert = { label: string; direction: 'high' | 'low'; count: number }
+let historyAlerts = $derived(
+  historyPoints.length < 2
+    ? ([] as TrendAlert[])
+    : waterParams.reduce((alerts: TrendAlert[], p) => {
+        const statuses = historyPoints.map((tp: any) => getHistoryStatus(tp.cl?.[p.name] ?? null, p.min, p.max))
+        const last = statuses[statuses.length - 1]
+        if (last !== 'high' && last !== 'low') return alerts
+        let count = 0
+        for (let i = statuses.length - 1; i >= 0; i--) {
+          if (statuses[i] === last) count++
+          else break
+        }
+        if (count >= 2) alerts.push({ label: p.label, direction: last, count })
+        return alerts
+      }, [])
+)
+  // ─── Deterministic dosing recommendations ───
+  const volL = $derived(visit.properties?.pool_volume_litres ?? 50000)
+
+  function calcRec(name: string, val: number, min: number, max: number, ideal: number): { action: string; amount: string } | null {
+    const vol = volL
+    const diff = val - ideal
+
+    if (name === 'ph') {
+      if (val < min) {
+        const steps = (ideal - val) / 0.1
+        const grams = Math.round(steps * 15 * vol / 10000)
+        return { action: 'Add soda ash (Na₂CO₃)', amount: grams >= 1000 ? `${(grams/1000).toFixed(2)} kg` : `${grams} g` }
+      }
+      if (val > max) {
+        const steps = (val - ideal) / 0.1
+        const grams = Math.round(steps * 15 * vol / 10000)
+        return { action: 'Add dry acid (NaHSO₄)', amount: grams >= 1000 ? `${(grams/1000).toFixed(2)} kg` : `${grams} g` }
+      }
+    }
+
+    if (name === 'chlorine') {
+      if (val < min) {
+        const grams = Math.round((ideal - val) * vol * 0.0075)
+        return { action: 'Add liquid chlorine', amount: grams >= 1000 ? `${(grams/1000).toFixed(1)} L` : `${grams} mL` }
+      }
+      if (val > max) {
+        return { action: 'Allow to dissipate naturally or reduce exposure time', amount: '—' }
+      }
+    }
+
+    if (name === 'alkalinity') {
+      if (val < min) {
+        const kg = ((ideal - val) / 10) * 1.4 * vol / 100000
+        return { action: 'Add buffer (sodium bicarbonate)', amount: `${kg.toFixed(2)} kg` }
+      }
+      if (val > max) {
+        const kg = ((val - ideal) / 10) * 1.2 * vol / 100000
+        return { action: 'Add dry acid (sodium bisulfate)', amount: `${kg.toFixed(2)} kg` }
+      }
+    }
+
+    if (name === 'stabiliser') {
+      if (val < min) {
+        const kg = ((ideal - val) / 10) * 1.0 * vol / 100000
+        return { action: 'Add stabiliser (cyanuric acid)', amount: `${kg.toFixed(2)} kg` }
+      }
+      if (val > max) {
+        return { action: 'Partial water replacement recommended', amount: `~${Math.round((val - ideal) / val * 100)}% water` }
+      }
+    }
+
+    if (name === 'salt') {
+      if (val < min) {
+        const kg = (ideal - val) * vol / 1_000_000
+        return { action: 'Add pool salt', amount: `${kg.toFixed(1)} kg` }
+      }
+      if (val > max) {
+        return { action: 'Partial water replacement recommended', amount: `~${Math.round((val - ideal) / val * 100)}% water` }
+      }
+    }
+
+    if (name === 'calcium_hardness') {
+      if (val < min) {
+        const kg = ((ideal - val) / 10) * 1.5 * vol / 100000
+        return { action: 'Add calcium hardness increaser', amount: `${kg.toFixed(2)} kg` }
+      }
+      if (val > max) {
+        return { action: 'Partial water replacement recommended', amount: `~${Math.round((val - ideal) / val * 100)}% water` }
+      }
+    }
+
+    return null
   }
 
+  function getRec(name: string, min: number, max: number, ideal: number) {
+    const v = parseFloat(values[name])
+    if (isNaN(v) || values[name] === '') return null
+    if (v >= min && v <= max) return null
+    return calcRec(name, v, min, max, ideal)
+  }
+
+  function toggleApplied(name: string) {
+  const s = new Set(appliedRecs)
+  if (s.has(name)) {
+    s.delete(name)
+  } else {
+    s.add(name)
+    applyRecToChemical(name)  // ← auto-fill chemical on check
+  }
+  appliedRecs = s
+}
+
+  // Keyword map: water param → keywords to match in products catalog
+const paramToKeywords: Record<string, string[]> = {
+  ph_low:   ['soda ash', 'sodium carbonate', 'ph increaser', 'ph up'],
+  ph_high:  ['dry acid', 'sodium bisulfate', 'ph reducer', 'ph down', 'acid'],
+  chlorine: ['liquid chlorine', 'chlorine', 'sodium hypochlorite'],
+  alkalinity_low:  ['buffer', 'sodium bicarbonate', 'bicarb', 'alkalinity up'],
+  alkalinity_high: ['dry acid', 'acid'],
+  stabiliser_low:  ['stabiliser', 'stabilizer', 'cyanuric', 'cya'],
+  salt:     ['salt', 'pool salt', 'sodium chloride'],
+  calcium_hardness_low: ['calcium', 'hardness', 'calcium hardness'],
+}
+
+function getParamKey(name: string, status: 'low' | 'high'): string {
+  if (name === 'ph') return status === 'low' ? 'ph_low' : 'ph_high'
+  if (name === 'alkalinity') return status === 'low' ? 'alkalinity_low' : 'alkalinity_high'
+  if (name === 'stabiliser') return status === 'low' ? 'stabiliser_low' : ''
+  if (name === 'calcium_hardness') return status === 'low' ? 'calcium_hardness_low' : ''
+  if (name === 'salt') return status === 'low' ? 'salt' : ''
+  if (name === 'chlorine') return status === 'low' ? 'chlorine' : ''
+  return ''
+}
+
+function parseAmount(amountStr: string): { value: number; unit: string } | null {
+  const m = amountStr.match(/^([\d.]+)\s*(kg|g|L|mL|tabs)?$/i)
+  if (!m) return null
+  let value = parseFloat(m[1])
+  let unit = m[2] ?? 'g'
+  // Normalize to base units: g→kg, mL→L
+  if (unit.toLowerCase() === 'g') { value = value / 1000; unit = 'kg' }
+  if (unit.toLowerCase() === 'ml') { value = value / 1000; unit = 'L' }
+  return { value, unit }
+}
+
+function applyRecToChemical(paramName: string) {
+  const status = getStatus(paramName, 
+    waterParams.find(p => p.name === paramName)!.min,
+    waterParams.find(p => p.name === paramName)!.max
+  )
+  if (status !== 'low' && status !== 'high') return
+  
+  const rec = getRec(paramName,
+    waterParams.find(p => p.name === paramName)!.min,
+    waterParams.find(p => p.name === paramName)!.max,
+    waterParams.find(p => p.name === paramName)!.ideal
+  )
+  if (!rec) return
+
+  const key = getParamKey(paramName, status)
+  if (!key) return
+
+  const keywords = paramToKeywords[key] ?? []
+  const parsed = parseAmount(rec.amount)
+  if (!parsed) return
+
+  // Find matching product in chemLines by keyword
+  const idx = chemLines.findIndex(line =>
+    line.product_id &&
+    keywords.some(kw => line.name.toLowerCase().includes(kw.toLowerCase()))
+  )
+
+  if (idx !== -1) {
+    const existing = parseFloat(chemLines[idx].amount) || 0
+    let amount = parsed.value
+    // Only convert if catalog unit differs from normalized unit
+    const lineUnit = chemLines[idx].unit.toLowerCase()
+    if (parsed.unit.toLowerCase() === 'kg' && lineUnit === 'g') amount = amount * 1000
+    if (parsed.unit.toLowerCase() === 'l' && lineUnit === 'ml') amount = amount * 1000
+    chemLines = chemLines.map((line, i) =>
+      i === idx ? { ...line, amount: (existing + amount).toFixed(2).replace(/\.00$/, '') } : line
+    )
+  } else {
+    const recName = rec.action.replace(/^Add\s+/i, '').split('(')[0].trim()
+    const existingCustomIdx = chemLines.findIndex(
+      line => !line.product_id && line.name.toLowerCase() === recName.toLowerCase()
+    )
+    if (existingCustomIdx !== -1) {
+      const existing = parseFloat(chemLines[existingCustomIdx].amount) || 0
+      chemLines = chemLines.map((line, i) =>
+        i === existingCustomIdx
+          ? { ...line, amount: (existing + parsed.value).toFixed(2).replace(/\.00$/, '') }
+          : line
+      )
+    } else {
+      chemLines = [
+        ...chemLines,
+        { product_id: '', name: recName, unit: parsed.unit, unit_price: 0, amount: parsed.value.toFixed(2).replace(/\.00$/, '') }
+      ]
+    }
+  }
+}
+
+  const statusStyle = {
+    ok:    { bg: 'bg-green-50 border-green-200',  badge: 'bg-green-100 text-green-700',  text: 'OK' },
+    low:   { bg: 'bg-amber-50 border-amber-200',  badge: 'bg-amber-100 text-amber-700',  text: 'Low' },
+    high:  { bg: 'bg-red-50 border-red-200',      badge: 'bg-red-100 text-red-700',      text: 'High' },
+    empty: { bg: 'bg-white border-border',         badge: '',                              text: '' },
+  }
+
+  // Photos
   let photos = $state<string[]>(checklist?.photos ?? [])
   let uploadingPhoto = $state(false)
 
@@ -145,25 +338,6 @@
   }
 
   function removePhoto(i: number) { photos = photos.filter((_, idx) => idx !== i) }
-
-  async function getRecommendations() {
-    loadingAI = true; aiError = ''; recommendations = []
-    const waterTest = Object.fromEntries(
-      Object.entries(values).map(([k, v]) => [k, parseFloat(v) || null])
-    )
-    try {
-      const res = await fetch('/api/ai-suggest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ waterTest, poolVolume: visit.properties?.pool_volume_litres, poolType: visit.properties?.pool_type })
-      })
-      const json = await res.json()
-      recommendations = json.recommendations ?? []
-      aiError = recommendations.length === 0 ? 'All parameters are within range — no action needed!' : ''
-      openRecommendations = true
-    } catch { aiError = 'Could not get recommendations. Try again.' }
-    finally { loadingAI = false }
-  }
 </script>
 
 <div class="max-w-2xl">
@@ -171,9 +345,12 @@
     <a href="/visits/{visit.id}{fromRoute ? '?from=route' : ''}" class="text-sm text-muted hover:text-text transition-colors">← Visit</a>
     <h1 class="text-xl font-semibold text-text mt-2">{checklist ? 'Edit checklist' : 'Checklist'}</h1>
     <p class="text-sm text-muted">{visit.properties?.customers?.name} · {visit.properties?.address}</p>
+    {#if visit.properties?.pool_volume_litres}
+      <p class="text-xs text-muted mt-0.5">{visit.properties.pool_volume_litres.toLocaleString()} L · {visit.properties.pool_type ?? ''}</p>
+    {/if}
   </div>
 
-  <form method="POST" action="?/save{fromRoute ? '&from=route' : ''}" use:enhance={() => {
+  <form method="POST" action="?/save{fromRoute ? '&from=route' : ''}" novalidate use:enhance={() => {
     loading = true
     return async ({ update }) => { await update(); loading = false }
   }}>
@@ -187,7 +364,69 @@
 
     <div class="space-y-3">
 
-      <!-- Tasks / Services -->
+      <!-- History trend (last visits, no today) -->
+      {#if historyPoints.length > 0}
+        <div class=" rounded-xl overflow-hidden bg-amber-50 border border-amber-400">
+          <div class="px-4 py-3 border-b border-border">
+            <p class="text-sm font-medium text-text">Previous readings</p>
+            <p class="text-xs text-muted mt-0.5">Last {historyPoints.length} visit{historyPoints.length > 1 ? 's' : ''}</p>
+          </div>
+          <div class="px-4 py-3">
+            {#if historyAlerts.length > 0}
+              <div class="space-y-1.5 mb-3">
+                {#each historyAlerts as alert}
+                  <div class="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-xs text-amber-700">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0"></span>
+                    {alert.label} {alert.direction === 'high' ? 'elevated' : 'low'} for {alert.count} consecutive visits
+                  </div>
+                {/each}
+              </div>
+            {/if}
+            <div class="overflow-x-auto  ">
+              <table class="w-full text-sm" style="min-width: 200px;">
+                <thead>
+                  <tr class="border-b border-border">
+                    <th class="text-left py-2 text-xs font-medium text-muted pr-4"></th>
+                    {#each historyPoints as tp}
+                      <th class="text-right py-2 px-2 text-xs font-medium text-muted whitespace-nowrap">
+                        {formatDateShort(tp.date)}
+                      </th>
+                    {/each}
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border">
+                  {#each waterParams as param}
+                    {@const hasAny = historyPoints.some((tp: any) => tp.cl?.[param.name] != null)}
+                    {#if hasAny}
+                      <tr>
+                        <td class="py-2 text-xs text-muted pr-4 whitespace-nowrap">{param.label}</td>
+                        {#each historyPoints as tp}
+                          {@const val = tp.cl?.[param.name] ?? null}
+                          {@const st = getHistoryStatus(val, param.min, param.max)}
+                          <td class="py-2 px-2 text-right whitespace-nowrap">
+                            {#if val != null}
+                              <span class="text-xs font-medium
+                                {st === 'ok' ? 'text-green-600' : st === 'high' ? 'text-red-500' : st === 'low' ? 'text-amber-500' : 'text-text'}">
+                                {val}
+                              </span>
+                              {#if st === 'high'}<span class="text-red-400 text-[10px] ml-0.5">↑</span>
+                              {:else if st === 'low'}<span class="text-amber-400 text-[10px] ml-0.5">↓</span>{/if}
+                            {:else}
+                              <span class="text-muted text-xs">—</span>
+                            {/if}
+                          </td>
+                        {/each}
+                      </tr>
+                    {/if}
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      {/if}
+
+      <!-- Tasks -->
       {#if services.length > 0}
         <div class="bg-card border border-border rounded-xl p-4">
           <p class="text-sm font-medium text-text mb-3">Tasks</p>
@@ -214,70 +453,65 @@
         </div>
       {/if}
 
+      
       <!-- Water test -->
       <div class="bg-card border border-border rounded-xl overflow-hidden">
-        <button type="button" onclick={() => openWaterTest = !openWaterTest}
-          class="w-full flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors">
+        <div class="px-4 py-3 border-b border-border">
           <p class="text-sm font-medium text-text">Water test</p>
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" class="transition-transform {openWaterTest ? 'rotate-180' : ''}"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
-        {#if openWaterTest}
-          <div class="px-4 pb-4 space-y-2 border-t border-border pt-3">
-            {#each waterParams as param}
-              {@const status = getStatus(param.name, param.min, param.max)}
-              {@const style = statusStyle[status]}
-              <div class="flex items-center gap-3 p-3 rounded-lg border transition-colors {style.bg}">
-                <div class="flex-1">
+          <p class="text-xs text-muted mt-0.5">Ideal range shown — recommendations appear automatically</p>
+        </div>
+        <div class="px-4 pb-4 pt-3 space-y-3">
+          {#each waterParams as param}
+            {@const status = getStatus(param.name, param.min, param.max)}
+            {@const style = statusStyle[status]}
+            {@const rec = getRec(param.name, param.min, param.max, param.ideal)}
+
+            <!-- Input row -->
+            <div class="rounded-xl border transition-colors {style.bg} overflow-hidden">
+              <div class="flex items-center gap-3 px-3 py-2.5">
+                <div class="flex-1 min-w-0">
                   <p class="text-xs font-medium text-text">{param.label}</p>
                   <p class="text-xs text-muted">{param.min}–{param.max}{param.unit ? ' ' + param.unit : ''}</p>
                 </div>
-                <input name={param.name} type="number" step={param.step} bind:value={values[param.name]} placeholder="—"
-                  class="w-24 px-3 py-1.5 rounded-lg border border-border bg-white text-text text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary" />
+                <input
+                  name={param.name}
+                  type="number"
+                  step={param.step}
+                  bind:value={values[param.name]}
+                  placeholder={param.placeholder}
+                  class="w-28 px-3 py-1.5 rounded-lg border border-border bg-white text-text text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary tabular-nums"
+                />
+                <span class="text-xs text-muted w-8 text-left">{param.unit}</span>
                 {#if status !== 'empty'}
-                  <span class="text-xs px-2 py-0.5 rounded-full font-medium w-10 text-center {style.label}">{style.text}</span>
+                  <span class="text-xs px-2 py-0.5 rounded-full font-medium w-10 text-center flex-shrink-0 {style.badge}">{style.text}</span>
                 {:else}
-                  <span class="w-10"></span>
+                  <span class="w-10 flex-shrink-0"></span>
                 {/if}
               </div>
-            {/each}
-            <button type="button" onclick={getRecommendations} disabled={loadingAI}
-              class="w-full mt-2 flex items-center justify-center gap-1.5 py-2 bg-primary text-white text-xs font-medium rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50">
-              {#if loadingAI}
-                <svg class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
-                Analysing…
-              {:else}✨ Get AI recommendations{/if}
-            </button>
-          </div>
-        {/if}
-      </div>
 
-      <!-- AI Recommendations -->
-      <div class="bg-card border border-border rounded-xl overflow-hidden">
-        <button type="button" onclick={() => openRecommendations = !openRecommendations}
-          class="w-full flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors">
-          <div class="flex items-center gap-2">
-            <p class="text-sm font-medium text-text">Chemical recommendations</p>
-            {#if recommendations.length > 0}
-              <span class="text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{recommendations.length}</span>
-            {/if}
-          </div>
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" class="transition-transform {openRecommendations ? 'rotate-180' : ''}"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
-        {#if openRecommendations}
-          <div class="px-4 pb-4 border-t border-border pt-3 space-y-2">
-            {#if aiError}<p class="text-xs text-muted">{aiError}</p>{/if}
-            {#each recommendations as rec}
-              <div class="p-3 rounded-lg border {rec.status === 'low' ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}">
-                <div class="flex items-center justify-between mb-1">
-                  <p class="text-xs font-medium {rec.status === 'low' ? 'text-amber-700' : 'text-red-700'}">{rec.parameter} — {rec.status === 'low' ? 'Too low' : 'Too high'}</p>
-                  <span class="text-xs font-semibold {rec.status === 'low' ? 'text-amber-700' : 'text-red-700'}">{rec.amount}</span>
+              <!-- Recommendation strip — shown when value is out of range -->
+              {#if rec}
+                <div class="border-t {status === 'low' ? 'border-amber-200 bg-amber-50/60' : 'border-red-200 bg-red-50/60'} px-3 py-2 flex items-start justify-between gap-3">
+                  <div class="flex-1 min-w-0">
+                    <p class="text-xs font-medium {status === 'low' ? 'text-amber-700' : 'text-red-700'}">{rec.action}</p>
+                    <p class="text-xs font-bold {status === 'low' ? 'text-amber-800' : 'text-red-800'} mt-0.5">{rec.amount}</p>
+                  </div>
+                  {#if !checklist}
+                    <label class="flex items-center gap-1.5 flex-shrink-0 cursor-pointer mt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={appliedRecs.has(param.name)}
+                        onchange={() => toggleApplied(param.name)}
+                        class="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+                      />
+                      <span class="text-xs {status === 'low' ? 'text-amber-700' : 'text-red-700'}">Applied</span>
+                    </label>
+                  {/if}
                 </div>
-                <p class="text-xs text-text font-medium">{rec.action}</p>
-                {#if rec.note}<p class="text-xs text-muted mt-0.5">{rec.note}</p>{/if}
-              </div>
-            {/each}
-          </div>
-        {/if}
+              {/if}
+            </div>
+          {/each}
+        </div>
       </div>
 
       <!-- Chemicals added -->
@@ -296,7 +530,6 @@
           <div class="px-4 pb-4 border-t border-border pt-3 space-y-2">
             {#each chemLines as line, i}
               {#if line.product_id}
-                <!-- Catalog chemical — same layout as before -->
                 <div class="flex items-center gap-2">
                   <div class="flex-1 min-w-0">
                     <p class="text-sm text-text truncate">{line.name}</p>
@@ -316,7 +549,6 @@
                   {/if}
                 </div>
               {:else}
-                <!-- Custom chemical -->
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
                     <input type="text" placeholder="Product name" bind:value={line.name}
@@ -396,7 +628,6 @@
         class="w-full py-3 bg-primary text-white text-sm font-medium rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-50">
         {loading ? 'Saving…' : checklist ? 'Update checklist' : 'Save checklist'}
       </button>
-
     </div>
   </form>
 </div>

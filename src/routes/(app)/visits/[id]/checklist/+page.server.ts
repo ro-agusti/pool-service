@@ -28,10 +28,32 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
     .eq('active', true)
     .order('sort_order')
 
+  // Last 3 completed visits (excluding current) with water data for trend
+const { data: historyRaw } = await locals.supabase
+  .from('visits')
+  .select(`
+    id,
+    scheduled_date,
+    visit_checklists ( ph, chlorine, alkalinity, stabiliser, salt, calcium_hardness )
+  `)
+  .eq('property_id', visit.property_id)
+  .eq('status', 'completed')
+  .neq('id', params.id)
+  .lt('scheduled_date', new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' }))
+  .order('scheduled_date', { ascending: false })
+  .limit(3)
+
+const visitHistory = (historyRaw ?? [])
+  .map((v) => ({
+    ...v,
+    visit_checklists: v.visit_checklists ? [v.visit_checklists as any] : [],
+  }))
+  .filter((v) => v.visit_checklists.length > 0)
+  .reverse() // chronological order for display
   const services  = (products ?? []).filter(p => !p.is_chemical)
   const chemicals = (products ?? []).filter(p => p.is_chemical)
 
-  return { visit, checklist: checklist ?? null, fromRoute, services, chemicals }
+return { visit, checklist: checklist ?? null, fromRoute, services, chemicals, visitHistory }
 }
 
 export const actions: Actions = {
