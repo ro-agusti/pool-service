@@ -16,22 +16,15 @@ export const actions: Actions = {
 
     if (!name?.trim()) return fail(400, { error: 'Name is required', name, email, phone, notes })
 
-    const { data: userData } = await locals.supabase
-      .from('users')
-      .select('org_id')
-      .eq('id', locals.user!.id)
-      .single()
-
-    if (!userData?.org_id) return fail(400, { error: 'Could not resolve organization', name, email, phone, notes })
-
-    const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-
-    const { data: customer, error } = await admin
-      .from('customers')
-      .insert({ org_id: userData.org_id, name, email, phone, notes })
-      .select('id')
-      .single()
-
+    const org_id = locals.user!.org_id
+if (!org_id) return fail(400, { error: 'Could not resolve organization', name, email, phone, notes })
+const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+const { data: customer, error } = await admin
+  .from('customers')
+  .insert({ org_id, name, email, phone, notes })
+  .select('id')
+  .single()
+  
     if (error) return fail(400, { error: error.message, name, email, phone, notes })
 
     throw redirect(303, `/customers/${customer.id}`)

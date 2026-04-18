@@ -70,7 +70,7 @@ for (const v of monthVisits ?? []) {
 const visitsQuery = locals.supabase
   .from('visits')
   .select(`
-    id, status, scheduled_time, type, notes, skip_reason,
+    id, status, scheduled_time, type, notes, skip_reason, technician_id,
     service_plans ( recurrence, preferred_day_of_week ),
     properties (
       id, address, suburb, state, postcode, lat, lng,
@@ -80,7 +80,26 @@ const visitsQuery = locals.supabase
   `)
   .eq('scheduled_date', selectedDate)
   .order('scheduled_time')
-const { data: visits } = await (isAdmin ? visitsQuery : visitsQuery.eq('technician_id', locals.user!.id))
+
+const result = await (isAdmin ? visitsQuery : visitsQuery.eq('technician_id', locals.user!.id))
+const visitsRaw = result.data ?? []
+
+// Obtener nombres de técnicos con service role (bypasea RLS)
+const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+const technicianIds = [...new Set(visitsRaw.map((v: any) => v.technician_id).filter(Boolean))]
+let technicianMap: Record<string, string> = {}
+if (technicianIds.length > 0) {
+  const { data: techs } = await admin
+    .from('users')
+    .select('id, name')
+    .in('id', technicianIds)
+  technicianMap = Object.fromEntries((techs ?? []).map((t: any) => [t.id, t.name]))
+}
+
+const visits = visitsRaw.map((v: any) => ({
+  ...v,
+  technician_name: technicianMap[v.technician_id] ?? null
+}))
 
 // Backlog
 const backlogQuery = locals.supabase

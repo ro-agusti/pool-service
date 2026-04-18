@@ -45,16 +45,36 @@ const weekDates = weekDays.map(date => ({
 const visitsQuery = locals.supabase
   .from('visits')
   .select(`
-    id, status, scheduled_time, scheduled_date,
+    id, status, scheduled_time, type, notes, skip_reason, technician_id,
+    service_plans ( recurrence, preferred_day_of_week ),
     properties (
-      id, address, suburb, lat, lng,
+      id, address, suburb, state, postcode, lat, lng,
       customers ( id, name, phone )
-    )
+    ),
+    invoices ( status )
   `)
   .eq('scheduled_date', selectedDate)
   .order('scheduled_time')
-const { data: visitsRaw } = await (isAdmin ? visitsQuery : visitsQuery.eq('technician_id', locals.user!.id))
-const visits = (visitsRaw ?? []).filter((v: any) => v.properties?.lat && v.properties?.lng)
+
+const result = await (isAdmin ? visitsQuery : visitsQuery.eq('technician_id', locals.user!.id))
+const visitsRaw = result.data ?? []
+
+// Obtener nombres de técnicos con service role (bypasea RLS)
+const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+const technicianIds = [...new Set(visitsRaw.map((v: any) => v.technician_id).filter(Boolean))]
+let technicianMap: Record<string, string> = {}
+if (technicianIds.length > 0) {
+  const { data: techs } = await admin
+    .from('users')
+    .select('id, name')
+    .in('id', technicianIds)
+  technicianMap = Object.fromEntries((techs ?? []).map((t: any) => [t.id, t.name]))
+}
+
+const visits = visitsRaw.map((v: any) => ({
+  ...v,
+  technician_name: technicianMap[v.technician_id] ?? null
+}))
 
 const backlogQuery = locals.supabase
   .from('visits')
@@ -74,57 +94,6 @@ const routeQuery = locals.supabase
   .eq('date', selectedDate)
   .maybeSingle()
 const { data: route } = await (isAdmin ? routeQuery : routeQuery.eq('technician_id', locals.user!.id))
-
-// const mondayStr = addDaysToStr(selectedDate, -dowOf(selectedDate))
-// const weekDays = Array.from({ length: 7 }, (_, i) => addDaysToStr(mondayStr, i))
-
-// const { data: weekVisits } = await locals.supabase
-//   .from('visits')
-//   .select('scheduled_date')
-//   .eq('technician_id', locals.user!.id)
-//   .gte('scheduled_date', weekDays[0])
-//   .lte('scheduled_date', weekDays[6])
-
-// const weekDates = weekDays.map(date => ({
-//   date,
-//   hasVisits: (weekVisits ?? []).some((v: any) => v.scheduled_date === date)
-// }))
-
-  const { data: visitsRaw } = await locals.supabase
-    .from('visits')
-    .select(`
-      id, status, scheduled_time, scheduled_date,
-      properties (
-        id, address, suburb, lat, lng,
-        customers ( id, name, phone )
-      )
-    `)
-    .eq('scheduled_date', selectedDate)
-    .eq('technician_id', locals.user!.id)
-    .order('scheduled_time')
-
-  const visits = (visitsRaw ?? []).filter((v: any) => v.properties?.lat && v.properties?.lng)
-
-  // Backlog — visitas vencidas pendientes
-  const { data: backlogRaw } = await locals.supabase
-    .from('visits')
-    .select(`
-      id, status, scheduled_date,
-      properties ( id, address, suburb, lat, lng, customers ( name ) )
-    `)
-    .in('status', ['pending', 'skipped'])
-    .lt('scheduled_date', selectedDate)
-    .eq('technician_id', locals.user!.id)
-    .order('scheduled_date')
-
-  const backlog = (backlogRaw ?? []).filter((v: any) => v.properties?.lat && v.properties?.lng)
-
-  const { data: route } = await locals.supabase
-    .from('routes')
-    .select('id, status, optimized_at, date, origin_lat, origin_lng')
-    .eq('date', selectedDate)
-    .eq('technician_id', locals.user!.id)
-    .maybeSingle()
 
   let routeVisits: any[] = []
   if (route) {

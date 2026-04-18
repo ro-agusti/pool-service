@@ -6,7 +6,6 @@
   let { data }: { data: PageData } = $props()
   let { visits, route, routeVisits, selectedDate, today, googleMapsKey, backlog, weekDates } = $derived(data)
 
-
   let map: any = null
   let markers: any[] = []
   let mapEl: HTMLDivElement
@@ -17,7 +16,6 @@
   let originLabel = $state('')
   let gettingLocation = $state(false)
 
-  // AI
   let loadingAI = $state(false)
   let suggestion = $state<any>(null)
   let aiError = $state('')
@@ -273,17 +271,16 @@
     if (lngInput) lngInput.value = String(originLng ?? '')
   }
 
-function changeWeek(offset: number) {
-  const [y, m, d] = selectedDate.split('-').map(Number)
-  const months = [0,31,28,31,30,31,30,31,31,30,31,30,31]
-  const isLeap = (yr: number) => yr % 4 === 0 && (yr % 100 !== 0 || yr % 400 === 0)
-  let cy = y, cm = m, cd = d + offset * 7
-  while (cd < 1) { cm--; if (cm < 1) { cm = 12; cy-- } cd += months[cm] + (cm === 2 && isLeap(cy) ? 1 : 0) }
-  while (true) { const dim = months[cm] + (cm === 2 && isLeap(cy) ? 1 : 0); if (cd <= dim) break; cd -= dim; cm++; if (cm > 12) { cm = 1; cy++ } }
-  const newDate = `${cy}-${String(cm).padStart(2,'0')}-${String(cd).padStart(2,'0')}`
-  window.location.href = `/route?date=${newDate}`
-}
-
+  function changeWeek(offset: number) {
+    const [y, m, d] = selectedDate.split('-').map(Number)
+    const months = [0,31,28,31,30,31,30,31,31,30,31,30,31]
+    const isLeap = (yr: number) => yr % 4 === 0 && (yr % 100 !== 0 || yr % 400 === 0)
+    let cy = y, cm = m, cd = d + offset * 7
+    while (cd < 1) { cm--; if (cm < 1) { cm = 12; cy-- } cd += months[cm] + (cm === 2 && isLeap(cy) ? 1 : 0) }
+    while (true) { const dim = months[cm] + (cm === 2 && isLeap(cy) ? 1 : 0); if (cd <= dim) break; cd -= dim; cm++; if (cm > 12) { cm = 1; cy++ } }
+    const newDate = `${cy}-${String(cm).padStart(2,'0')}-${String(cd).padStart(2,'0')}`
+    window.location.href = `/route?date=${newDate}`
+  }
 </script>
 
 <div class="max-w-2xl">
@@ -316,7 +313,6 @@ function changeWeek(offset: number) {
     </div>
   </div>
 
-  <!-- Header -->
   <div class="mb-4">
     <h1 class="text-2xl font-semibold text-text">Route</h1>
     <p class="text-sm text-muted">
@@ -350,7 +346,7 @@ function changeWeek(offset: number) {
   <!-- Map -->
   <div bind:this={mapEl} class="w-full h-64 rounded-xl border border-border mb-4 bg-surface"></div>
 
-  <!-- AI suggestion button -->
+  <!-- AI suggestion -->
   {#if visits.length > 0}
     <div class="mb-4">
       <button type="button" onclick={getAISuggestion} disabled={loadingAI}
@@ -419,10 +415,11 @@ function changeWeek(offset: number) {
   {/if}
 
   <a href="/route/nearby-visits?date={selectedDate}"
-  class="w-full mb-4 py-2.5 flex items-center justify-center gap-2 border border-border bg-card text-sm font-medium text-text rounded-xl hover:bg-surface transition-colors">
-  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-  Find nearby visits
-</a>
+    class="w-full mb-4 py-2.5 flex items-center justify-center gap-2 border border-border bg-card text-sm font-medium text-text rounded-xl hover:bg-surface transition-colors">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    Find nearby visits
+  </a>
+
   <!-- Visit list -->
   {#if orderedVisits.length === 0}
     <div class="bg-card border border-border rounded-xl p-10 text-center text-muted text-sm">
@@ -442,6 +439,7 @@ function changeWeek(offset: number) {
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-text truncate">{visit.properties?.customers?.name ?? '—'}</p>
                 <p class="text-xs text-muted truncate">{visit.properties?.address}{#if visit.properties?.suburb}, {visit.properties.suburb}{/if}</p>
+                {#if visit.technician_name}<p class="text-xs text-muted mt-0.5">👤 {visit.technician_name}</p>{/if}
                 <div class="flex items-center gap-2 mt-0.5">
                   {#if rv.estimated_arrival}
                     <span class="text-xs text-primary font-medium">{formatTime(rv.estimated_arrival)}</span>

@@ -67,18 +67,16 @@
     return (dow + 6) % 7
   }
 
-  // Grilla del mes: celdas con fecha o null (días del mes anterior)
   let monthGrid = $derived.by(() => {
     const { year: y, month: m } = monthYear
     const daysInMonth = [0,31,28,31,30,31,30,31,31,30,31,30,31]
     const isLeap = (yr: number) => yr % 4 === 0 && (yr % 100 !== 0 || yr % 400 === 0)
     const dim = daysInMonth[m] + (m === 2 && isLeap(y) ? 1 : 0)
-    const firstDay = dowOf(`${y}-${String(m).padStart(2,'0')}-01`) // 0=Mon
+    const firstDay = dowOf(`${y}-${String(m).padStart(2,'0')}-01`)
     const cells: (string | null)[] = Array(firstDay).fill(null)
     for (let d = 1; d <= dim; d++) {
       cells.push(`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`)
     }
-    // Pad to full weeks
     while (cells.length % 7 !== 0) cells.push(null)
     return cells
   })
@@ -92,7 +90,6 @@
     let ny = y, nm = m + offset
     if (nm > 12) { nm = 1; ny++ }
     if (nm < 1) { nm = 12; ny-- }
-    // Navegar al día 1 del nuevo mes (o al today si es el mes actual)
     const newDate = `${ny}-${String(nm).padStart(2,'0')}-01`
     goto(`?date=${newDate}`)
   }
@@ -118,9 +115,8 @@
   </div>
 
   {#if view === 'month'}
-    <!-- ── MONTH VIEW ── -->
+    <!-- MONTH VIEW -->
     <div class="bg-card border border-border rounded-xl overflow-hidden mb-6">
-      <!-- Header -->
       <div class="flex items-center justify-between px-4 py-3 border-b border-border">
         <button onclick={() => changeMonth(-1)} class="p-1 text-muted hover:text-text transition-colors">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
@@ -131,14 +127,12 @@
         </button>
       </div>
 
-      <!-- Day labels -->
       <div class="grid grid-cols-7 border-b border-border">
         {#each days as d}
           <div class="py-2 text-center text-xs text-muted font-medium">{d}</div>
         {/each}
       </div>
 
-      <!-- Calendar grid -->
       <div class="grid grid-cols-7">
         {#each monthGrid as cell, i}
           {#if cell === null}
@@ -147,7 +141,6 @@
             {@const info = monthMap[cell]}
             {@const isSelected = cell === selectedDate}
             {@const isToday = cell === today}
-            {@const allDone = info && info.completed === info.total}
             <button
               onclick={() => selectDay(cell)}
               class="min-h-[52px] p-1.5 flex flex-col items-center gap-1 transition-colors
@@ -174,7 +167,6 @@
       </div>
     </div>
 
-    <!-- Legend -->
     <div class="flex items-center gap-4 mb-6 px-1">
       <div class="flex items-center gap-1.5 text-xs text-muted">
         <span class="w-2 h-2 rounded-full bg-primary"></span> Pending
@@ -184,7 +176,6 @@
       </div>
     </div>
 
-    <!-- Selected day visits (preview) -->
     {#if visits.length > 0}
       <div class="mb-3">
         <h2 class="text-base font-medium text-text">{formatDate(selectedDate)}</h2>
@@ -196,6 +187,7 @@
             <div class="min-w-0 flex-1">
               <p class="text-sm font-medium text-text truncate">{visit.properties?.customers?.name ?? '—'}</p>
               <p class="text-xs text-muted truncate">{visit.properties?.address}{#if visit.properties?.suburb}, {visit.properties.suburb}{/if}</p>
+              {#if visit.technician_name}<p class="text-xs text-muted mt-0.5">👤 {visit.technician_name}</p>{/if}
               {#if visit.scheduled_time}<p class="text-xs text-muted mt-0.5">{formatTime(visit.scheduled_time)}</p>{/if}
             </div>
             <span class="text-xs px-2 py-0.5 rounded-full border flex-shrink-0 capitalize {statusColors[visit.status]}">
@@ -209,7 +201,7 @@
     {/if}
 
   {:else}
-    <!-- ── DAY VIEW (original) ── -->
+    <!-- DAY VIEW -->
 
     <!-- Week strip -->
     <div class="bg-card border border-border rounded-xl mb-6 overflow-hidden">
@@ -265,6 +257,7 @@
                     <p class="text-sm font-medium text-text truncate">{visit.properties?.customers?.name ?? '—'}</p>
                     <p class="text-xs text-muted mt-0.5 truncate">{visit.properties?.address}{#if visit.properties?.suburb}, {visit.properties.suburb}{/if}</p>
                     {#if visit.service_plans}<p class="text-xs text-primary mt-0.5">{formatRecurrence(visit.service_plans)}</p>{/if}
+                    {#if visit.technician_name}<p class="text-xs text-muted mt-0.5">👤 {visit.technician_name}</p>{/if}
                     {#if visit.scheduled_time}<p class="text-xs text-muted mt-1">{formatTime(visit.scheduled_time)}</p>{/if}
                   </div>
                   <div class="flex flex-col items-end gap-1 flex-shrink-0">
@@ -287,6 +280,7 @@
                     <p class="text-sm font-medium text-text truncate">{visit.properties?.customers?.name ?? '—'}</p>
                     <p class="text-xs text-muted mt-0.5 truncate">{visit.properties?.address}{#if visit.properties?.suburb}, {visit.properties.suburb}{/if}</p>
                     {#if visit.service_plans}<p class="text-xs text-primary mt-0.5">{formatRecurrence(visit.service_plans)}</p>{/if}
+                    {#if visit.technician_name}<p class="text-xs text-muted mt-0.5">👤 {visit.technician_name}</p>{/if}
                     {#if visit.scheduled_time}<p class="text-xs text-muted mt-1">{formatTime(visit.scheduled_time)}</p>{/if}
                   </div>
                   <div class="flex flex-col items-end gap-1 flex-shrink-0">
@@ -361,6 +355,7 @@
               <div class="min-w-0">
                 <p class="text-sm font-medium text-text truncate">{visit.properties?.customers?.name ?? '—'}</p>
                 <p class="text-xs text-muted truncate">{visit.properties?.address}</p>
+                {#if visit.technician_name}<p class="text-xs text-muted mt-0.5">👤 {visit.technician_name}</p>{/if}
                 <p class="text-xs text-danger mt-0.5">
                   {new Date(visit.scheduled_date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
                   {#if visit.skip_reason}· {visit.skip_reason}{/if}
