@@ -27,70 +27,72 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     return `${cy}-${String(cm).padStart(2,'0')}-${String(cd).padStart(2,'0')}`
   }
 
-  // Week strip
-  const mondayStr = addDaysToStr(selectedDate, -dowOf(selectedDate))
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDaysToStr(mondayStr, i))
+  const isAdmin = locals.user!.role === 'admin'
 
-  const { data: weekVisits } = await locals.supabase
-    .from('visits')
-    .select('scheduled_date')
-    .eq('technician_id', locals.user!.id)
-    .gte('scheduled_date', weekDays[0])
-    .lte('scheduled_date', weekDays[6])
+// Week strip
+const mondayStr = addDaysToStr(selectedDate, -dowOf(selectedDate))
+const weekDays = Array.from({ length: 7 }, (_, i) => addDaysToStr(mondayStr, i))
 
-  const datesWithVisits = new Set(weekVisits?.map((v: any) => v.scheduled_date) ?? [])
-  const weekDates = weekDays.map(date => ({ date, hasVisits: datesWithVisits.has(date) }))
+const weekQuery = locals.supabase
+  .from('visits')
+  .select('scheduled_date')
+  .gte('scheduled_date', weekDays[0])
+  .lte('scheduled_date', weekDays[6])
+const { data: weekVisits } = await (isAdmin ? weekQuery : weekQuery.eq('technician_id', locals.user!.id))
 
-  // Month calendar dots
-  const [sy, sm] = selectedDate.split('-').map(Number)
-  const monthStart = `${sy}-${String(sm).padStart(2,'0')}-01`
-  const daysInMonth = [0,31,28,31,30,31,30,31,31,30,31,30,31]
-  const isLeap = (yr: number) => yr % 4 === 0 && (yr % 100 !== 0 || yr % 400 === 0)
-  const dim = daysInMonth[sm] + (sm === 2 && isLeap(sy) ? 1 : 0)
-  const monthEnd = `${sy}-${String(sm).padStart(2,'0')}-${String(dim).padStart(2,'0')}`
+const datesWithVisits = new Set(weekVisits?.map((v: any) => v.scheduled_date) ?? [])
+const weekDates = weekDays.map(date => ({ date, hasVisits: datesWithVisits.has(date) }))
 
-  const { data: monthVisits } = await locals.supabase
-    .from('visits')
-    .select('scheduled_date, status')
-    .eq('technician_id', locals.user!.id)
-    .gte('scheduled_date', monthStart)
-    .lte('scheduled_date', monthEnd)
+// Month calendar dots
+const [sy, sm] = selectedDate.split('-').map(Number)
+const monthStart = `${sy}-${String(sm).padStart(2,'0')}-01`
+const daysInMonth = [0,31,28,31,30,31,30,31,31,30,31,30,31]
+const isLeap = (yr: number) => yr % 4 === 0 && (yr % 100 !== 0 || yr % 400 === 0)
+const dim = daysInMonth[sm] + (sm === 2 && isLeap(sy) ? 1 : 0)
+const monthEnd = `${sy}-${String(sm).padStart(2,'0')}-${String(dim).padStart(2,'0')}`
 
-  // Agrupar por fecha: { date -> { total, completed } }
-  const monthMap: Record<string, { total: number; completed: number }> = {}
-  for (const v of monthVisits ?? []) {
-    if (!monthMap[v.scheduled_date]) monthMap[v.scheduled_date] = { total: 0, completed: 0 }
-    monthMap[v.scheduled_date].total++
-    if (v.status === 'completed') monthMap[v.scheduled_date].completed++
-  }
+const monthQuery = locals.supabase
+  .from('visits')
+  .select('scheduled_date, status')
+  .gte('scheduled_date', monthStart)
+  .lte('scheduled_date', monthEnd)
+const { data: monthVisits } = await (isAdmin ? monthQuery : monthQuery.eq('technician_id', locals.user!.id))
 
-  // Visits del día seleccionado
-  const { data: visits } = await locals.supabase
-    .from('visits')
-    .select(`
-      id, status, scheduled_time, type, notes, skip_reason,
-      service_plans ( recurrence, preferred_day_of_week ),
-      properties (
-        id, address, suburb, state, postcode, lat, lng,
-        customers ( id, name, phone )
-      ),
-      invoices ( status )
-    `)
-    .eq('scheduled_date', selectedDate)
-    .eq('technician_id', locals.user!.id)
-    .order('scheduled_time')
+// Agrupar por fecha: { date -> { total, completed } }
+const monthMap: Record<string, { total: number; completed: number }> = {}
+for (const v of monthVisits ?? []) {
+  if (!monthMap[v.scheduled_date]) monthMap[v.scheduled_date] = { total: 0, completed: 0 }
+  monthMap[v.scheduled_date].total++
+  if (v.status === 'completed') monthMap[v.scheduled_date].completed++
+}
 
-  // Backlog
-  const { data: backlog } = await locals.supabase
-    .from('visits')
-    .select(`
-      id, status, scheduled_date, scheduled_time, skip_reason,
-      properties ( id, address, suburb, customers ( id, name ) )
-    `)
-    .in('status', ['pending', 'skipped'])
-    .lt('scheduled_date', today)
-    .eq('technician_id', locals.user!.id)
-    .order('scheduled_date')
+// Visits del día seleccionado
+const visitsQuery = locals.supabase
+  .from('visits')
+  .select(`
+    id, status, scheduled_time, type, notes, skip_reason,
+    service_plans ( recurrence, preferred_day_of_week ),
+    properties (
+      id, address, suburb, state, postcode, lat, lng,
+      customers ( id, name, phone )
+    ),
+    invoices ( status )
+  `)
+  .eq('scheduled_date', selectedDate)
+  .order('scheduled_time')
+const { data: visits } = await (isAdmin ? visitsQuery : visitsQuery.eq('technician_id', locals.user!.id))
+
+// Backlog
+const backlogQuery = locals.supabase
+  .from('visits')
+  .select(`
+    id, status, scheduled_date, scheduled_time, skip_reason,
+    properties ( id, address, suburb, customers ( id, name ) )
+  `)
+  .in('status', ['pending', 'skipped'])
+  .lt('scheduled_date', today)
+  .order('scheduled_date')
+const { data: backlog } = await (isAdmin ? backlogQuery : backlogQuery.eq('technician_id', locals.user!.id))
 
   return {
     visits: visits ?? [],

@@ -25,21 +25,70 @@ function addDaysToStr(dateStr: string, days: number): string {
   while (true) { const dim = months[cm] + (cm === 2 && isLeap(cy) ? 1 : 0); if (cd <= dim) break; cd -= dim; cm++; if (cm > 12) { cm = 1; cy++ } }
   return `${cy}-${String(cm).padStart(2,'0')}-${String(cd).padStart(2,'0')}`
 }
+const isAdmin = locals.user!.role === 'admin'
 
 const mondayStr = addDaysToStr(selectedDate, -dowOf(selectedDate))
 const weekDays = Array.from({ length: 7 }, (_, i) => addDaysToStr(mondayStr, i))
 
-const { data: weekVisits } = await locals.supabase
+const weekQuery = locals.supabase
   .from('visits')
   .select('scheduled_date')
-  .eq('technician_id', locals.user!.id)
   .gte('scheduled_date', weekDays[0])
   .lte('scheduled_date', weekDays[6])
+const { data: weekVisits } = await (isAdmin ? weekQuery : weekQuery.eq('technician_id', locals.user!.id))
 
 const weekDates = weekDays.map(date => ({
   date,
   hasVisits: (weekVisits ?? []).some((v: any) => v.scheduled_date === date)
 }))
+
+const visitsQuery = locals.supabase
+  .from('visits')
+  .select(`
+    id, status, scheduled_time, scheduled_date,
+    properties (
+      id, address, suburb, lat, lng,
+      customers ( id, name, phone )
+    )
+  `)
+  .eq('scheduled_date', selectedDate)
+  .order('scheduled_time')
+const { data: visitsRaw } = await (isAdmin ? visitsQuery : visitsQuery.eq('technician_id', locals.user!.id))
+const visits = (visitsRaw ?? []).filter((v: any) => v.properties?.lat && v.properties?.lng)
+
+const backlogQuery = locals.supabase
+  .from('visits')
+  .select(`
+    id, status, scheduled_date,
+    properties ( id, address, suburb, lat, lng, customers ( name ) )
+  `)
+  .in('status', ['pending', 'skipped'])
+  .lt('scheduled_date', selectedDate)
+  .order('scheduled_date')
+const { data: backlogRaw } = await (isAdmin ? backlogQuery : backlogQuery.eq('technician_id', locals.user!.id))
+const backlog = (backlogRaw ?? []).filter((v: any) => v.properties?.lat && v.properties?.lng)
+
+const routeQuery = locals.supabase
+  .from('routes')
+  .select('id, status, optimized_at, date, origin_lat, origin_lng')
+  .eq('date', selectedDate)
+  .maybeSingle()
+const { data: route } = await (isAdmin ? routeQuery : routeQuery.eq('technician_id', locals.user!.id))
+
+// const mondayStr = addDaysToStr(selectedDate, -dowOf(selectedDate))
+// const weekDays = Array.from({ length: 7 }, (_, i) => addDaysToStr(mondayStr, i))
+
+// const { data: weekVisits } = await locals.supabase
+//   .from('visits')
+//   .select('scheduled_date')
+//   .eq('technician_id', locals.user!.id)
+//   .gte('scheduled_date', weekDays[0])
+//   .lte('scheduled_date', weekDays[6])
+
+// const weekDates = weekDays.map(date => ({
+//   date,
+//   hasVisits: (weekVisits ?? []).some((v: any) => v.scheduled_date === date)
+// }))
 
   const { data: visitsRaw } = await locals.supabase
     .from('visits')
@@ -116,8 +165,6 @@ export const actions: Actions = {
     const originLat = form.get('originLat') ? Number(form.get('originLat')) : null
     const originLng = form.get('originLng') ? Number(form.get('originLng')) : null
 
-    console.log('optimizeRoute called, date:', selectedDate, 'visitIds:', visitIds.length, 'origin:', originLat, originLng)
-
     if (visitIds.length === 0) throw redirect(303, `/route?date=${selectedDate}`)
 
     const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
@@ -128,7 +175,6 @@ export const actions: Actions = {
       .in('id', visitIds)
 
     const validVisits = (visits ?? []).filter((v: any) => v.properties?.lat && v.properties?.lng)
-    console.log('validVisits:', validVisits.length)
 
     if (validVisits.length < 2) {
       await saveRoute(admin, locals.user!, selectedDate, validVisits.map((v: any, i: number) => ({
@@ -169,8 +215,6 @@ export const actions: Actions = {
       })
 
       const apiData = await res.json()
-      console.log('Routes API status:', res.status)
-      console.log('Routes API response:', JSON.stringify(apiData))
 
       const apiRoute = apiData.routes?.[0]
       const optimizedOrder: number[] = apiRoute?.optimizedIntermediateWaypointIndex ?? []
@@ -184,8 +228,6 @@ export const actions: Actions = {
         validVisits[validVisits.length - 1]
       ].filter(Boolean)
 
-      console.log('reordered count:', reordered.length)
-      console.log('legs count:', legs.length)
 
       const now = new Date()
       let currentMins = now.getHours() * 60 + now.getMinutes()
@@ -206,7 +248,6 @@ export const actions: Actions = {
         }
       })
 
-      console.log('routeVisits to save:', JSON.stringify(routeVisits))
       await saveRoute(admin, locals.user!, selectedDate, routeVisits, originLat, originLng)
 
     } catch (e) {

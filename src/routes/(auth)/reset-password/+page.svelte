@@ -21,7 +21,6 @@
   supabase = createClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY)
 
   const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
-    console.log('auth event:', event, session)
     if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
       sessionReady = true
     }

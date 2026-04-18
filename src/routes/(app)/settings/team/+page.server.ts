@@ -5,13 +5,13 @@ import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private'
 import type { Actions, PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ locals }) => {
-  const { data: team } = await locals.supabase
+  const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+  const { data: team } = await admin
     .from('users')
     .select('id, name, email, role')
     .eq('org_id', locals.user!.org_id)
     .order('role')
     .order('name')
-
   return { team: team ?? [] }
 }
 

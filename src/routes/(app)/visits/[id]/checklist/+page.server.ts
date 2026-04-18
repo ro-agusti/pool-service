@@ -5,11 +5,14 @@ import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private'
 import type { PageServerLoad, Actions } from './$types'
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
+
+  const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
   const fromRoute = url.searchParams.get('from') === 'route'
 
-  const { data: visit } = await locals.supabase
+  const { data: visit } = await admin
     .from('visits')
-    .select('id, status, property_id, org_id, properties(address, suburb, pool_volume_litres, pool_type, customers(name))')
+    .select('id, status, property_id, org_id, properties(id, address, suburb, pool_volume_litres, pool_type, customer_id, customers(name))')
     .eq('id', params.id)
     .single()
 
@@ -75,13 +78,13 @@ export const actions: Actions = {
     const chemicalsRaw     = form.get('chemicals_added') as string
     const chemicals_added  = chemicalsRaw ? JSON.parse(chemicalsRaw) : []
 
-    const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    const { data: visit } = await admin
-      .from('visits')
-      .select('org_id')
-      .eq('id', params.id)
-      .single()
+
+const { data: visit } = await admin
+  .from('visits')
+  .select('id, status, property_id, org_id, properties(id, address, suburb, pool_volume_litres, pool_type, customer_id, customers(name))')
+  .eq('id', params.id)
+  .single()
 
     await admin.from('visit_checklists').upsert({
       visit_id: params.id,

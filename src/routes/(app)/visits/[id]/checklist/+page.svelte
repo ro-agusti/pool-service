@@ -8,6 +8,7 @@
   let { data }: { data: PageData } = $props()
 let { visit, checklist, visitHistory, fromRoute: fr, services, chemicals: chemicalProducts } = $derived(data)
 
+
   let fromRoute = $state(false)
   let loading = $state(false)
   let openChemicals = $state(true)
@@ -126,78 +127,92 @@ let historyAlerts = $derived(
       }, [])
 )
   // ─── Deterministic dosing recommendations ───
-  const volL = $derived(visit.properties?.pool_volume_litres ?? 50000)
 
-  function calcRec(name: string, val: number, min: number, max: number, ideal: number): { action: string; amount: string } | null {
-    const vol = volL
-    const diff = val - ideal
+function calcRec(name: string, val: number, min: number, max: number, ideal: number) {
+  const vol = volL
 
-    if (name === 'ph') {
-      if (val < min) {
-        const steps = (ideal - val) / 0.1
-        const grams = Math.round(steps * 15 * vol / 10000)
-        return { action: 'Add soda ash (Na₂CO₃)', amount: grams >= 1000 ? `${(grams/1000).toFixed(2)} kg` : `${grams} g` }
-      }
-      if (val > max) {
-        const steps = (val - ideal) / 0.1
-        const grams = Math.round(steps * 15 * vol / 10000)
-        return { action: 'Add dry acid (NaHSO₄)', amount: grams >= 1000 ? `${(grams/1000).toFixed(2)} kg` : `${grams} g` }
-      }
+  if (name === 'ph') {
+    if (val < min) {
+      const action = 'Add soda ash (Na₂CO₃)'
+      if (!vol) return { action, amount: 'Volume needed for dosing' }
+      const steps = (ideal - val) / 0.1
+      const grams = Math.round(steps * 15 * vol / 10000)
+      return { action, amount: grams >= 1000 ? `${(grams/1000).toFixed(2)} kg` : `${grams} g` }
     }
-
-    if (name === 'chlorine') {
-      if (val < min) {
-        const grams = Math.round((ideal - val) * vol * 0.0075)
-        return { action: 'Add liquid chlorine', amount: grams >= 1000 ? `${(grams/1000).toFixed(1)} L` : `${grams} mL` }
-      }
-      if (val > max) {
-        return { action: 'Allow to dissipate naturally or reduce exposure time', amount: '—' }
-      }
+    if (val > max) {
+      const action = 'Add dry acid (NaHSO₄)'
+      if (!vol) return { action, amount: 'Volume needed for dosing' }
+      const steps = (val - ideal) / 0.1
+      const grams = Math.round(steps * 15 * vol / 10000)
+      return { action, amount: grams >= 1000 ? `${(grams/1000).toFixed(2)} kg` : `${grams} g` }
     }
-
-    if (name === 'alkalinity') {
-      if (val < min) {
-        const kg = ((ideal - val) / 10) * 1.4 * vol / 100000
-        return { action: 'Add buffer (sodium bicarbonate)', amount: `${kg.toFixed(2)} kg` }
-      }
-      if (val > max) {
-        const kg = ((val - ideal) / 10) * 1.2 * vol / 100000
-        return { action: 'Add dry acid (sodium bisulfate)', amount: `${kg.toFixed(2)} kg` }
-      }
-    }
-
-    if (name === 'stabiliser') {
-      if (val < min) {
-        const kg = ((ideal - val) / 10) * 1.0 * vol / 100000
-        return { action: 'Add stabiliser (cyanuric acid)', amount: `${kg.toFixed(2)} kg` }
-      }
-      if (val > max) {
-        return { action: 'Partial water replacement recommended', amount: `~${Math.round((val - ideal) / val * 100)}% water` }
-      }
-    }
-
-    if (name === 'salt') {
-      if (val < min) {
-        const kg = (ideal - val) * vol / 1_000_000
-        return { action: 'Add pool salt', amount: `${kg.toFixed(1)} kg` }
-      }
-      if (val > max) {
-        return { action: 'Partial water replacement recommended', amount: `~${Math.round((val - ideal) / val * 100)}% water` }
-      }
-    }
-
-    if (name === 'calcium_hardness') {
-      if (val < min) {
-        const kg = ((ideal - val) / 10) * 1.5 * vol / 100000
-        return { action: 'Add calcium hardness increaser', amount: `${kg.toFixed(2)} kg` }
-      }
-      if (val > max) {
-        return { action: 'Partial water replacement recommended', amount: `~${Math.round((val - ideal) / val * 100)}% water` }
-      }
-    }
-
-    return null
   }
+
+  if (name === 'chlorine') {
+    if (val < min) {
+      const action = 'Add liquid chlorine'
+      if (!vol) return { action, amount: 'Volume needed for dosing' }
+      const grams = Math.round((ideal - val) * vol * 0.0075)
+      return { action, amount: grams >= 1000 ? `${(grams/1000).toFixed(1)} L` : `${grams} mL` }
+    }
+    if (val > max) {
+      return { action: 'Allow to dissipate naturally or reduce exposure time', amount: '—' }
+    }
+  }
+
+  if (name === 'alkalinity') {
+    if (val < min) {
+      const action = 'Add buffer (sodium bicarbonate)'
+      if (!vol) return { action, amount: 'Volume needed for dosing' }
+      const kg = ((ideal - val) / 10) * 1.4 * vol / 100000
+      return { action, amount: `${kg.toFixed(2)} kg` }
+    }
+    if (val > max) {
+      const action = 'Add dry acid (sodium bisulfate)'
+      if (!vol) return { action, amount: 'Volume needed for dosing' }
+      const kg = ((val - ideal) / 10) * 1.2 * vol / 100000
+      return { action, amount: `${kg.toFixed(2)} kg` }
+    }
+  }
+
+  if (name === 'stabiliser') {
+    if (val < min) {
+      const action = 'Add stabiliser (cyanuric acid)'
+      if (!vol) return { action, amount: 'Volume needed for dosing' }
+      const kg = ((ideal - val) / 10) * 1.0 * vol / 100000
+      return { action, amount: `${kg.toFixed(2)} kg` }
+    }
+    if (val > max) {
+      return { action: 'Partial water replacement recommended', amount: `~${Math.round((val - ideal) / val * 100)}% water` }
+    }
+  }
+
+  if (name === 'salt') {
+    if (val < min) {
+      const action = 'Add pool salt'
+      if (!vol) return { action, amount: 'Volume needed for dosing' }
+      const kg = (ideal - val) * vol / 1_000_000
+      return { action, amount: `${kg.toFixed(1)} kg` }
+    }
+    if (val > max) {
+      return { action: 'Partial water replacement recommended', amount: `~${Math.round((val - ideal) / val * 100)}% water` }
+    }
+  }
+
+  if (name === 'calcium_hardness') {
+    if (val < min) {
+      const action = 'Add calcium hardness increaser'
+      if (!vol) return { action, amount: 'Volume needed for dosing' }
+      const kg = ((ideal - val) / 10) * 1.5 * vol / 100000
+      return { action, amount: `${kg.toFixed(2)} kg` }
+    }
+    if (val > max) {
+      return { action: 'Partial water replacement recommended', amount: `~${Math.round((val - ideal) / val * 100)}% water` }
+    }
+  }
+
+  return null
+}
 
   function getRec(name: string, min: number, max: number, ideal: number) {
     const v = parseFloat(values[name])
@@ -455,64 +470,74 @@ function applyRecToChemical(paramName: string) {
 
       
       <!-- Water test -->
-      <div class="bg-card border border-border rounded-xl overflow-hidden">
-        <div class="px-4 py-3 border-b border-border">
-          <p class="text-sm font-medium text-text">Water test</p>
-          <p class="text-xs text-muted mt-0.5">Ideal range shown — recommendations appear automatically</p>
-        </div>
-        <div class="px-4 pb-4 pt-3 space-y-3">
-          {#each waterParams as param}
-            {@const status = getStatus(param.name, param.min, param.max)}
-            {@const style = statusStyle[status]}
-            {@const rec = getRec(param.name, param.min, param.max, param.ideal)}
+<div class="bg-card border border-border rounded-xl overflow-hidden">
+  <div class="px-4 py-3 border-b border-border">
+    <p class="text-sm font-medium text-text">Water test</p>
+    <p class="text-xs text-muted mt-0.5">Ideal range shown — recommendations appear automatically</p>
+    {#if !visit.properties?.pool_volume_litres}
 
-            <!-- Input row -->
-            <div class="rounded-xl border transition-colors {style.bg} overflow-hidden">
-              <div class="flex items-center gap-3 px-3 py-2.5">
-                <div class="flex-1 min-w-0">
-                  <p class="text-xs font-medium text-text">{param.label}</p>
-                  <p class="text-xs text-muted">{param.min}–{param.max}{param.unit ? ' ' + param.unit : ''}</p>
-                </div>
-                <input
-                  name={param.name}
-                  type="number"
-                  step={param.step}
-                  bind:value={values[param.name]}
-                  placeholder={param.placeholder}
-                  class="w-28 px-3 py-1.5 rounded-lg border border-border bg-white text-text text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary tabular-nums"
-                />
-                <span class="text-xs text-muted w-8 text-left">{param.unit}</span>
-                {#if status !== 'empty'}
-                  <span class="text-xs px-2 py-0.5 rounded-full font-medium w-10 text-center flex-shrink-0 {style.badge}">{style.text}</span>
-                {:else}
-                  <span class="w-10 flex-shrink-0"></span>
-                {/if}
-              </div>
-
-              <!-- Recommendation strip — shown when value is out of range -->
-              {#if rec}
-                <div class="border-t {status === 'low' ? 'border-amber-200 bg-amber-50/60' : 'border-red-200 bg-red-50/60'} px-3 py-2 flex items-start justify-between gap-3">
-                  <div class="flex-1 min-w-0">
-                    <p class="text-xs font-medium {status === 'low' ? 'text-amber-700' : 'text-red-700'}">{rec.action}</p>
-                    <p class="text-xs font-bold {status === 'low' ? 'text-amber-800' : 'text-red-800'} mt-0.5">{rec.amount}</p>
-                  </div>
-                  {#if !checklist}
-                    <label class="flex items-center gap-1.5 flex-shrink-0 cursor-pointer mt-0.5">
-                      <input
-                        type="checkbox"
-                        checked={appliedRecs.has(param.name)}
-                        onchange={() => toggleApplied(param.name)}
-                        class="w-4 h-4 rounded border-border text-primary focus:ring-primary"
-                      />
-                      <span class="text-xs {status === 'low' ? 'text-amber-700' : 'text-red-700'}">Applied</span>
-                    </label>
-                  {/if}
-                </div>
-              {/if}
-            </div>
-          {/each}
-        </div>
+      <div class="mt-2 flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+        <span>⚠️</span>
+        <span>Pool volume not set — dosing estimates will be inaccurate.
+          <a href="/customers/{visit.properties?.customer_id}/properties/{visit.property_id}/edit"
+  class="underline font-medium">Add volume →</a>
+        </span>
       </div>
+    {/if}
+  </div>
+  <div class="px-4 pb-4 pt-3 space-y-3">
+    {#each waterParams as param}
+      {@const status = getStatus(param.name, param.min, param.max)}
+      {@const style = statusStyle[status]}
+      {@const rec = getRec(param.name, param.min, param.max, param.ideal)}
+
+      <!-- Input row -->
+      <div class="rounded-xl border transition-colors {style.bg} overflow-hidden">
+        <div class="flex items-center gap-3 px-3 py-2.5">
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-medium text-text">{param.label}</p>
+            <p class="text-xs text-muted">{param.min}–{param.max}{param.unit ? ' ' + param.unit : ''}</p>
+          </div>
+          <input
+            name={param.name}
+            type="number"
+            step={param.step}
+            bind:value={values[param.name]}
+            placeholder={param.placeholder}
+            class="w-28 px-3 py-1.5 rounded-lg border border-border bg-white text-text text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary tabular-nums"
+          />
+          <span class="text-xs text-muted w-8 text-left">{param.unit}</span>
+          {#if status !== 'empty'}
+            <span class="text-xs px-2 py-0.5 rounded-full font-medium w-10 text-center flex-shrink-0 {style.badge}">{style.text}</span>
+          {:else}
+            <span class="w-10 flex-shrink-0"></span>
+          {/if}
+        </div>
+
+        <!-- Recommendation strip -->
+        {#if rec}
+          <div class="border-t {status === 'low' ? 'border-amber-200 bg-amber-50/60' : 'border-red-200 bg-red-50/60'} px-3 py-2 flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-medium {status === 'low' ? 'text-amber-700' : 'text-red-700'}">{rec.action}</p>
+              <p class="text-xs font-bold {status === 'low' ? 'text-amber-800' : 'text-red-800'} mt-0.5">{rec.amount}</p>
+            </div>
+            {#if !checklist}
+              <label class="flex items-center gap-1.5 flex-shrink-0 cursor-pointer mt-0.5">
+                <input
+                  type="checkbox"
+                  checked={appliedRecs.has(param.name)}
+                  onchange={() => toggleApplied(param.name)}
+                  class="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+                />
+                <span class="text-xs {status === 'low' ? 'text-amber-700' : 'text-red-700'}">Applied</span>
+              </label>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    {/each}
+  </div>
+</div>
 
       <!-- Chemicals added -->
       <div class="bg-card border border-border rounded-xl overflow-hidden">
