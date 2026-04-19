@@ -163,6 +163,9 @@
                 <div>
                   <p class="text-sm font-medium text-text capitalize">{plan.recurrence}</p>
                   <p class="text-sm text-muted mt-1">Every {days[plan.preferred_day_of_week]} at {formatTime(plan.preferred_time)}</p>
+                  {#if plan.technician_name}
+  <p class="text-xs text-muted mt-0.5">👤 {plan.technician_name}</p>
+{/if}
                   {#if plan.pool_equipment?.pump || plan.pool_equipment?.filter || plan.pool_equipment?.chlorinator}
                     <div class="mt-2 space-y-0.5">
                       {#if plan.pool_equipment.pump}<p class="text-xs text-muted">Pump: <span class="text-text">{plan.pool_equipment.pump}</span></p>{/if}

@@ -91,14 +91,26 @@
             {[property.suburb, property.state, property.postcode].filter(Boolean).join(' ')}
           </p>
           <div class="flex items-center justify-between mt-2">
-            <div class="flex items-center gap-2">
-              {#if property.pool_type}
-                <span class="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary capitalize">{property.pool_type}</span>
-              {/if}
-              {#if property.pool_volume_litres}
-                <span class="text-xs text-muted">{property.pool_volume_litres.toLocaleString()}L</span>
-              {/if}
-            </div>
+            <div class="flex flex-col gap-1">
+  <div class="flex items-center gap-2">
+    {#if property.pool_type}
+      <span class="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary capitalize">{property.pool_type}</span>
+    {/if}
+    {#if property.pool_volume_litres}
+      <span class="text-xs text-muted">{property.pool_volume_litres.toLocaleString()}L</span>
+    {/if}
+  </div>
+  {#if property.active_plan}
+    <div class="flex items-center gap-2 flex-wrap">
+      <span class="text-xs text-muted capitalize">{property.active_plan.recurrence}</span>
+      <span class="text-xs text-muted">·</span>
+      <span class="text-xs text-muted">{['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][property.active_plan.preferred_day_of_week]}</span>
+      {#if property.active_plan.technician_name}
+        <span class="text-xs text-muted">· 👤 {property.active_plan.technician_name}</span>
+      {/if}
+    </div>
+  {/if}
+</div>
             {#if isAdmin}
               <div class="flex items-center gap-1">
                 <a href="/customers/{customer.id}/properties/{property.id}/edit"

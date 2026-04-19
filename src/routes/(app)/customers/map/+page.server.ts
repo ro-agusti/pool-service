@@ -10,7 +10,6 @@ export const load: PageServerLoad = async ({ locals }) => {
   const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
   const org_id = locals.user!.org_id
 
-  // All properties with active service plan and technician
   const { data: properties } = await admin
     .from('properties')
     .select(`
@@ -25,14 +24,12 @@ export const load: PageServerLoad = async ({ locals }) => {
     .not('lat', 'is', null)
     .not('lng', 'is', null)
 
-  // Get all technicians
   const { data: technicians } = await admin
     .from('users')
     .select('id, name')
     .eq('org_id', org_id)
     .order('name')
 
-  // Attach active plan and technician name to each property
   const technicianMap = Object.fromEntries((technicians ?? []).map((t: any) => [t.id, t.name]))
 
   const propertiesWithPlan = (properties ?? []).map((p: any) => {
@@ -61,40 +58,35 @@ export const actions: Actions = {
     const propertyId = form.get('propertyId') as string
 
     const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-
-    // Get current plan details
-    const { data: plan } = await admin
-      .from('service_plans')
-      .select('*')
-      .eq('id', planId)
-      .single()
-
+    const { data: plan } = await admin.from('service_plans').select('*').eq('id', planId).single()
     if (!plan) return
 
-    // Update technician on plan
-    await admin
-      .from('service_plans')
-      .update({ technician_id: technicianId })
-      .eq('id', planId)
+    await admin.from('service_plans').update({ technician_id: technicianId }).eq('id', planId)
 
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' })
+    await admin.from('visits').delete().eq('service_plan_id', planId).eq('status', 'pending').gte('scheduled_date', todayStr)
 
-    // Delete future pending visits for this plan
-    await admin
-      .from('visits')
-      .delete()
-      .eq('service_plan_id', planId)
-      .eq('status', 'pending')
-      .gte('scheduled_date', todayStr)
-
-    // Regenerate visits with new technician
     const generateFrom = plan.start_date > todayStr ? plan.start_date : todayStr
+    await generateVisits(planId, propertyId, locals.user!.org_id, technicianId, plan.recurrence, plan.preferred_day_of_week, plan.preferred_time, generateFrom, admin)
+  },
 
-    await generateVisits(
-      planId, propertyId, locals.user!.org_id,
-      technicianId, plan.recurrence, plan.preferred_day_of_week,
-      plan.preferred_time, generateFrom, admin
-    )
+  applyRecommendations: async ({ request, locals }) => {
+    const form = await request.formData()
+    const recs = JSON.parse(form.get('recommendations') as string) as { planId: string, propertyId: string, technicianId: string }[]
+
+    const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' })
+
+    for (const rec of recs) {
+      const { data: plan } = await admin.from('service_plans').select('*').eq('id', rec.planId).single()
+      if (!plan) continue
+
+      await admin.from('service_plans').update({ technician_id: rec.technicianId }).eq('id', rec.planId)
+      await admin.from('visits').delete().eq('service_plan_id', rec.planId).eq('status', 'pending').gte('scheduled_date', todayStr)
+
+      const generateFrom = plan.start_date > todayStr ? plan.start_date : todayStr
+      await generateVisits(rec.planId, rec.propertyId, locals.user!.org_id, rec.technicianId, plan.recurrence, plan.preferred_day_of_week, plan.preferred_time, generateFrom, admin)
+    }
   }
 }
 
@@ -130,43 +122,20 @@ function compareDate(ay: number, am: number, ad: number, by: number, bm: number,
   return ad - bd
 }
 
-async function generateVisits(
-  planId: string, propertyId: string, orgId: string,
-  technicianId: string, recurrence: string, targetDow: number,
-  time: string, startDate: string, admin: any
-) {
+async function generateVisits(planId: string, propertyId: string, orgId: string, technicianId: string, recurrence: string, targetDow: number, time: string, startDate: string, admin: any) {
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' })
   const [ty, tm, td] = todayStr.split('-').map(Number)
   const [ly, lm, ld] = addDays(ty, tm, td, 42)
-
   const [sy, sm, sd] = startDate.split('-').map(Number)
-  let [cy, cm, cd] = compareDate(sy, sm, sd, ty, tm, td) >= 0
-    ? [sy, sm, sd]
-    : [ty, tm, td]
-
+  let [cy, cm, cd] = compareDate(sy, sm, sd, ty, tm, td) >= 0 ? [sy, sm, sd] : [ty, tm, td]
   const offset = (targetDow - dowOf(cy, cm, cd) + 7) % 7
   if (offset > 0) [cy, cm, cd] = addDays(cy, cm, cd, offset)
-
   if (compareDate(cy, cm, cd, ly, lm, ld) > 0) return
-
   const intervalDays = recurrence === 'weekly' ? 7 : recurrence === 'fortnightly' ? 14 : 28
   const visits: any[] = []
-
   while (compareDate(cy, cm, cd, ly, lm, ld) <= 0) {
-    visits.push({
-      org_id: orgId,
-      property_id: propertyId,
-      service_plan_id: planId,
-      technician_id: technicianId,
-      type: 'recurring',
-      scheduled_date: toStr(cy, cm, cd),
-      scheduled_time: time,
-      status: 'pending'
-    })
+    visits.push({ org_id: orgId, property_id: propertyId, service_plan_id: planId, technician_id: technicianId, type: 'recurring', scheduled_date: toStr(cy, cm, cd), scheduled_time: time, status: 'pending' })
     ;[cy, cm, cd] = addDays(cy, cm, cd, intervalDays)
   }
-
-  if (visits.length > 0) {
-    await admin.from('visits').insert(visits)
-  }
+  if (visits.length > 0) await admin.from('visits').insert(visits)
 }

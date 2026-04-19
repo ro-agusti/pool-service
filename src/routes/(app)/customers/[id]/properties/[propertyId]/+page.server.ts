@@ -1,7 +1,12 @@
 import { error } from '@sveltejs/kit'
+import { createClient } from '@supabase/supabase-js'
+import { PUBLIC_SUPABASE_URL } from '$env/static/public'
+import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private'
 import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ locals, params }) => {
+  const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
   const { data: property } = await locals.supabase
     .from('properties')
     .select('*, customers(id, name)')
@@ -10,13 +15,26 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 
   if (!property) throw error(404, 'Property not found')
 
-  const { data: plans } = await locals.supabase
+  const { data: plansRaw } = await locals.supabase
     .from('service_plans')
     .select('*')
     .eq('property_id', params.propertyId)
     .order('created_at')
 
-  // Próxima visita pendiente
+  // Get technician names for all plans
+  const techIds = [...new Set((plansRaw ?? []).map((p: any) => p.technician_id).filter(Boolean))]
+  let techMap: Record<string, string> = {}
+  if (techIds.length > 0) {
+    const { data: techs } = await admin.from('users').select('id, name').in('id', techIds as string[])
+    techMap = Object.fromEntries((techs ?? []).map((t: any) => [t.id, t.name]))
+  }
+
+  const plans = (plansRaw ?? []).map((p: any) => ({
+    ...p,
+    technician_name: techMap[p.technician_id] ?? null
+  }))
+
+  // Next pending visit
   const { data: nextVisit } = await locals.supabase
     .from('visits')
     .select('id, scheduled_date, scheduled_time, status')
@@ -27,7 +45,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     .limit(1)
     .maybeSingle()
 
-  // Historial de visitas — incluye invoice status
+  // Visit history
   const { data: visitHistory } = await locals.supabase
     .from('visits')
     .select('id, scheduled_date, scheduled_time, status, skip_reason, type, invoices(status)')
@@ -35,7 +53,6 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     .order('scheduled_date', { ascending: false })
     .limit(20)
 
-  // Ver cuáles visitas tienen checklist
   const visitIds = (visitHistory ?? []).map((v: any) => v.id)
   let checklistIds = new Set<string>()
   if (visitIds.length > 0) {
@@ -49,7 +66,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
   return {
     property,
     customer: property.customers,
-    plans: plans ?? [],
+    plans,
     nextVisit: nextVisit ?? null,
     visitHistory: (visitHistory ?? []).map((v: any) => ({
       ...v,
