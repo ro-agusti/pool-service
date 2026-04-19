@@ -112,45 +112,46 @@
   {:else}
     <div class="bg-card border border-border rounded-xl overflow-hidden">
       {#each team as member, i}
-        <div class="px-4 py-3 flex items-center gap-3 {i !== 0 ? 'border-t border-border' : ''}">
-          <!-- Avatar -->
-          <div class="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-            <span class="text-sm font-medium text-primary">{member.name?.charAt(0).toUpperCase() ?? '?'}</span>
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2">
-              <p class="text-sm font-medium text-text truncate">{member.name}</p>
-              {#if member.id === currentUserId}
-                <span class="text-xs text-muted">(you)</span>
-              {/if}
-            </div>
-            <p class="text-xs text-muted truncate">{member.email}</p>
-          </div>
-          <div class="flex items-center gap-2 flex-shrink-0">
-            <span class="text-xs px-2 py-0.5 rounded-full border capitalize {roleColors[member.role] ?? 'bg-slate-100 text-slate-500 border-slate-200'}">
-              {member.role}
-            </span>
-            {#if member.id !== currentUserId && member.role !== 'admin'}
-              {#if confirmDeleteId === member.id}
-                <form method="POST" action="?/deleteTechnician" use:enhance={() => {
-                  return async ({ update }) => { await update(); confirmDeleteId = null }
-                }} class="flex items-center gap-1">
-                  <input type="hidden" name="userId" value={member.id} />
-                  <span class="text-xs text-muted">Sure?</span>
-                  <button type="submit" class="text-xs px-2 py-1 bg-danger text-white rounded-lg">Yes</button>
-                  <button type="button" onclick={() => confirmDeleteId = null}
-                    class="text-xs px-2 py-1 border border-border rounded-lg hover:bg-surface">No</button>
-                </form>
-              {:else}
-                <button onclick={() => confirmDeleteId = member.id}
-                  class="p-1.5 text-muted hover:text-danger border border-border rounded-lg hover:bg-red-50 transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-                </button>
-              {/if}
-            {/if}
-          </div>
+  <div class="px-4 py-3 flex items-center gap-3 {i !== 0 ? 'border-t border-border' : ''}">
+    <a href="/settings/team/{member.id}" class="flex items-center gap-3 flex-1 min-w-0 hover:opacity-80 transition-opacity">
+      <div class="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+        <span class="text-sm font-medium text-primary">{member.name?.charAt(0).toUpperCase() ?? '?'}</span>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <p class="text-sm font-medium text-text truncate">{member.name}</p>
+          {#if member.id === currentUserId}
+            <span class="text-xs text-muted">(you)</span>
+          {/if}
         </div>
-      {/each}
+        <p class="text-xs text-muted truncate">{member.email}</p>
+      </div>
+    </a>
+    <div class="flex items-center gap-2 flex-shrink-0">
+      <span class="text-xs px-2 py-0.5 rounded-full border capitalize {roleColors[member.role] ?? 'bg-slate-100 text-slate-500 border-slate-200'}">
+        {member.role}
+      </span>
+      {#if member.id !== currentUserId && member.role !== 'admin'}
+        {#if confirmDeleteId === member.id}
+          <form method="POST" action="?/deleteTechnician" use:enhance={() => {
+            return async ({ update }) => { await update(); confirmDeleteId = null }
+          }} class="flex items-center gap-1">
+            <input type="hidden" name="userId" value={member.id} />
+            <span class="text-xs text-muted">Sure?</span>
+            <button type="submit" class="text-xs px-2 py-1 bg-danger text-white rounded-lg">Yes</button>
+            <button type="button" onclick={() => confirmDeleteId = null}
+              class="text-xs px-2 py-1 border border-border rounded-lg hover:bg-surface">No</button>
+          </form>
+        {:else}
+          <button onclick={() => confirmDeleteId = member.id}
+            class="p-1.5 text-muted hover:text-danger border border-border rounded-lg hover:bg-red-50 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </button>
+        {/if}
+      {/if}
+    </div>
+  </div>
+{/each}
     </div>
   {/if}
 </div>
