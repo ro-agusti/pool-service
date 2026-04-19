@@ -8,7 +8,7 @@
   let search = $state(data.search)
   let debounce: ReturnType<typeof setTimeout>
 
-      let isAdmin = $derived($page.data.user?.role === 'admin')
+      let isAdmin = $derived(page.data.user?.role === 'admin')
 
   function onSearch(e: Event) {
     search = (e.target as HTMLInputElement).value

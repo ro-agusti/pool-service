@@ -6,7 +6,7 @@
   let { data }: { data: PageData } = $props()
   let { customer, properties } = $derived(data)
 
-  let isAdmin = $derived($page.data.user?.role === 'admin')
+  let isAdmin = $derived(page.data.user?.role === 'admin')
 
   let confirmDeleteCustomer = $state(false)
   let confirmDeletePropertyId = $state<string | null>(null)

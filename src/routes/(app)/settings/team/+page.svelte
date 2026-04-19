@@ -14,7 +14,7 @@
   let confirmDeleteId = $state<string | null>(null)
   let loading = $state(false)
 
-  const currentUserId = $derived($page.data.user?.id)
+  const currentUserId = $derived(page.data.user?.id)
 
   function cancelForm() {
     showForm = false
