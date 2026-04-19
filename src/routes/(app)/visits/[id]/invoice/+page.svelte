@@ -3,7 +3,7 @@
   import type { PageData } from './$types'
 
   let { data }: { data: PageData } = $props()
-  let { visit, orgSettings, invoice, lines, total } = $derived(data)
+  let { visit, orgSettings, invoice, lines, total, fromCustomer } = $derived(data)
 
   let generating = $state(false)
 
@@ -138,7 +138,10 @@
 
 <div class="max-w-2xl">
   <div class="mb-6">
-    <a href="/visits/{visit.id}" class="text-sm text-muted hover:text-text transition-colors">← Visit</a>
+    <a href={fromCustomer ? `/customers/${fromCustomer}` : `/visits/${visit.id}`}
+      class="text-sm text-muted hover:text-text transition-colors">
+      ← {fromCustomer ? 'Customer' : 'Visit'}
+    </a>
     <div class="flex items-baseline gap-3 mt-2">
       <h1 class="text-xl font-semibold text-text">Invoice</h1>
       {#if invoice?.invoice_number}
@@ -234,6 +237,9 @@
     <!-- Actions -->
     {#if !invoice}
       <form method="POST" action="?/create" use:enhance class="mb-3">
+        {#if fromCustomer}
+          <input type="hidden" name="fromCustomer" value={fromCustomer} />
+        {/if}
         <button type="submit"
           class="w-full py-3 bg-primary text-white text-sm font-medium rounded-xl hover:bg-primary-dark transition-colors">
           Save invoice
@@ -262,6 +268,9 @@
 
         {#if invoice.status === 'pending'}
           <form method="POST" action="?/markPaid" use:enhance>
+            {#if fromCustomer}
+              <input type="hidden" name="fromCustomer" value={fromCustomer} />
+            {/if}
             <button type="submit"
               class="w-full py-3 border border-green-200 text-green-600 bg-green-50 text-sm font-medium rounded-xl hover:bg-green-100 transition-colors">
               Mark as paid

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { page } from '$app/stores'
+  import { page } from '$app/state'
   import type { LayoutData } from './$types'
 
   let { data, children }: { data: LayoutData, children: any } = $props()
@@ -36,7 +36,7 @@
   let navItems = $derived(allNavItems.filter(item => !item.adminOnly || isAdmin))
 
   function isActive(href: string): boolean {
-    return $page.url.pathname.startsWith(href)
+    return page.url.pathname.startsWith(href)
   }
 </script>
 

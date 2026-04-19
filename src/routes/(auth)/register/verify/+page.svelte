@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { page } from '$app/stores'
+  import { page } from '$app/state'
 
   const email = $derived($page.url.searchParams.get('email') ?? '')
 </script>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { enhance } from '$app/forms'
-  import { page } from '$app/stores'
+  import { page } from '$app/state'
   import type { PageData } from './$types'
 
   let { data }: { data: PageData } = $props()
@@ -127,6 +127,66 @@
           </div>
         </div>
       {/each}
+    </div>
+  {/if}
+
+  <!-- Invoices section -->
+  {#if data.invoices && data.invoices.length > 0}
+    <div class="mt-8">
+      <h2 class="text-lg font-medium text-text mb-3">Invoices</h2>
+
+      <!-- Pending -->
+      {#if data.invoices.filter((i: any) => i.status === 'pending' || i.status === 'overdue').length > 0}
+        <p class="text-xs font-medium text-muted uppercase tracking-wider mb-2">Pending</p>
+        <div class="bg-card border border-border rounded-xl overflow-hidden mb-4">
+          {#each data.invoices.filter((i: any) => i.status === 'pending' || i.status === 'overdue') as inv, idx}
+<a href="/visits/{inv.visits?.id ?? ''}/invoice?from=customer&customerId={customer.id}" class="flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors {idx !== 0 ? 'border-t border-border' : ''}">
+              <div>
+                <p class="text-sm font-medium text-text">
+                  {inv.visits?.properties?.address ?? '—'}
+                  {#if inv.invoice_number}
+                    <span class="text-muted font-normal">#{inv.invoice_number}</span>
+                  {/if}
+                </p>
+                <p class="text-xs text-muted">
+                  {inv.visits?.scheduled_date
+                    ? new Date(inv.visits.scheduled_date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : ''}
+                </p>
+              </div>
+              <span class="text-xs px-2 py-0.5 rounded-full border
+                {inv.status === 'overdue' ? 'bg-red-50 text-red-500 border-red-200' : 'bg-amber-50 text-amber-600 border-amber-200'}
+                capitalize">{inv.status}</span>
+            </a>
+          {/each}
+        </div>
+      {/if}
+
+      <!-- Paid -->
+  {#if data.invoices.filter((i: any) => i.status === 'paid').length > 0}
+        <p class="text-xs font-medium text-muted uppercase tracking-wider mb-2">Paid</p>
+        <div class="bg-card border border-border rounded-xl overflow-hidden">
+          {#each data.invoices.filter((i: any) => i.status === 'paid') as inv, idx}
+            <a href="/visits/{inv.visits?.id ?? ''}/invoice?from=customer&customerId={customer.id}"
+              class="flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors {idx !== 0 ? 'border-t border-border' : ''}">
+              <div>
+                <p class="text-sm font-medium text-text">
+                  {inv.visits?.properties?.address ?? '—'}
+                  {#if inv.invoice_number}
+                    <span class="text-muted font-normal">#{inv.invoice_number}</span>
+                  {/if}
+                </p>
+                <p class="text-xs text-muted">
+                  {inv.visits?.scheduled_date
+                    ? new Date(inv.visits.scheduled_date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : ''}
+                </p>
+              </div>
+              <span class="text-xs px-2 py-0.5 rounded-full border bg-green-50 text-green-600 border-green-200">Paid</span>
+            </a>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 </div>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
   import type { PageData } from './$types'
-  import { page } from '$app/stores'
+  import { page } from '$app/state'
 
   let { data }: { data: PageData } = $props()
 

@@ -2,6 +2,7 @@
   import { enhance } from '$app/forms'
   import { onMount } from 'svelte'
   import type { PageData } from './$types'
+  import { page } from '$app/state'
 
   let { data }: { data: PageData } = $props()
   let { visits, route, routeVisits, selectedDate, today, googleMapsKey, backlog, weekDates } = $derived(data)
@@ -36,7 +37,8 @@
           position: i + 1,
           visits: v,
           estimated_arrival: v.scheduled_time?.slice(0, 5) ?? null,
-          estimated_travel_mins: null
+          estimated_travel_mins: null,
+          estimated_distance_meters: null
         }))
   )
 
@@ -140,24 +142,31 @@
   }
 
   onMount(() => {
-    const saved = sessionStorage.getItem('route_origin')
-    if (saved) {
-      const { lat, lng, label } = JSON.parse(saved)
-      originLat = lat
-      originLng = lng
-      originLabel = label
-      if (originInputEl) originInputEl.value = label
-    }
+  const saved = sessionStorage.getItem('route_origin')
+  if (saved) {
+    const { lat, lng, label } = JSON.parse(saved)
+    originLat = lat
+    originLng = lng
+    originLabel = label
+    if (originInputEl) originInputEl.value = label
+  }
 
+  // Always reassign initMap to current component instance
+  ;(window as any).initMap = initMap
+
+  if ((window as any).google?.maps) {
+    initMap()
+  } else {
     const script = document.createElement('script')
     script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsKey}&libraries=places&callback=initMap`
     script.async = true
     script.defer = true
-    ;(window as any).initMap = initMap
     document.head.appendChild(script)
-  })
-
+  }
+})
   function initMap() {
+      console.log('initMap, visits:', visits.length, 'routeVisits:', routeVisits.length)
+
     if (!mapEl) return
     map = new (window as any).google.maps.Map(mapEl, {
       zoom: 11,
@@ -219,6 +228,7 @@
     const visitsToShow = orderedVisits.filter((rv: any) => {
       const v = rv.visits
       return v?.properties?.lat && v?.properties?.lng
+        && v?.status !== 'completed' && v?.status !== 'cancelled'
     })
 
     visitsToShow.forEach((rv: any, i: number) => {
@@ -414,6 +424,14 @@
     </p>
   {/if}
 
+  {#if page.data.user?.role === 'admin'}
+  <a href="/route/overview?date={selectedDate}"
+    class="w-full mb-4 py-2.5 flex items-center justify-center gap-2 border border-border bg-card text-sm font-medium text-text rounded-xl hover:bg-surface transition-colors">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+    Team overview
+  </a>
+{/if}
+
   <a href="/route/nearby-visits?date={selectedDate}"
     class="w-full mb-4 py-2.5 flex items-center justify-center gap-2 border border-border bg-card text-sm font-medium text-text rounded-xl hover:bg-surface transition-colors">
     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -446,6 +464,9 @@
                   {/if}
                   {#if rv.estimated_travel_mins}
                     <span class="text-xs text-muted">· {rv.estimated_travel_mins} min drive</span>
+                  {/if}
+                  {#if rv.estimated_distance_meters}
+                    <span class="text-xs text-muted">· {(rv.estimated_distance_meters / 1000).toFixed(1)} km</span>
                   {/if}
                 </div>
               </div>

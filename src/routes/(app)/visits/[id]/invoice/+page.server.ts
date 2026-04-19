@@ -4,7 +4,11 @@ import { PUBLIC_SUPABASE_URL } from '$env/static/public'
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private'
 import type { PageServerLoad, Actions } from './$types'
 
-export const load: PageServerLoad = async ({ locals, params }) => {
+export const load: PageServerLoad = async ({ locals, params, url }) => {
+  const fromCustomer = url.searchParams.get('from') === 'customer'
+    ? url.searchParams.get('customerId')
+    : null
+
   const { data: visit } = await locals.supabase
     .from('visits')
     .select(`
@@ -30,8 +34,9 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     .select('id, name, unit_price, unit, is_chemical')
     .eq('org_id', locals.user!.org_id)
 
-  // Use org_settings instead of organizations
-  const { data: orgSettings } = await locals.supabase
+  const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+  const { data: orgSettings } = await admin
     .from('org_settings')
     .select('*')
     .eq('org_id', locals.user!.org_id)
@@ -66,21 +71,24 @@ export const load: PageServerLoad = async ({ locals, params }) => {
   const lines = [...serviceLines, ...chemicalLines]
   const total = lines.reduce((sum, l) => sum + l!.total, 0)
 
-  return { visit, orgSettings: orgSettings ?? null, invoice: invoice ?? null, lines, total }
+  return { visit, orgSettings: orgSettings ?? null, invoice: invoice ?? null, lines, total, fromCustomer }
 }
 
 export const actions: Actions = {
-  create: async ({ params, locals }) => {
-    const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+  create: async ({ params, locals, request }) => {
+  const form = await request.formData()
+  const fromCustomer = form.get('fromCustomer') as string | null
+  const suffix = fromCustomer ? `?from=customer&customerId=${fromCustomer}` : ''
 
+    const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     const { data: existing } = await admin
       .from('invoices')
       .select('id')
       .eq('visit_id', params.id)
       .maybeSingle()
-    if (existing) throw redirect(303, `/visits/${params.id}/invoice`)
 
-    // Calculate next invoice number for this org
+    if (existing) throw redirect(303, `/visits/${params.id}/invoice${suffix}`)
+
     const { count } = await admin
       .from('invoices')
       .select('*', { count: 'exact', head: true })
@@ -95,14 +103,19 @@ export const actions: Actions = {
       invoice_number,
     })
 
-    throw redirect(303, `/visits/${params.id}/invoice`)
+  throw redirect(303, `/visits/${params.id}/invoice${suffix}`)
   },
 
-  markPaid: async ({ params }) => {
+  markPaid: async ({ params, request }) => {
+  const form = await request.formData()
+  const fromCustomer = form.get('fromCustomer') as string | null
+  const suffix = fromCustomer ? `?from=customer&customerId=${fromCustomer}` : ''
+
     const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     await admin.from('invoices')
       .update({ status: 'paid', paid_at: new Date().toISOString() })
       .eq('visit_id', params.id)
-    throw redirect(303, `/visits/${params.id}/invoice`)
+
+  throw redirect(303, `/visits/${params.id}/invoice${suffix}`)
   }
 }
