@@ -6,7 +6,7 @@ import type { PageServerLoad, Actions } from './$types'
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 
-  const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
   const fromRoute = url.searchParams.get('from') === 'route'
 
@@ -18,28 +18,24 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 
   if (!visit) throw error(404, 'Visit not found')
 
-  const { data: checklist } = await locals.supabase
-    .from('visit_checklists')
-    .select('*')
-    .eq('visit_id', params.id)
-    .maybeSingle()
+  const { data: checklist } = await admin
+  .from('visit_checklists')
+  .select('*')
+  .eq('visit_id', params.id)
+  .maybeSingle()
 
-  const { data: products } = await locals.supabase
-    .from('products')
-    .select('id, name, unit, unit_price, is_chemical')
-    .eq('org_id', locals.user!.org_id)
-    .eq('active', true)
-    .order('sort_order')
+const { data: products } = await admin
+  .from('products')
+  .select('id, name, unit, unit_price, is_chemical')
+  .eq('org_id', locals.user!.org_id)
+  .eq('active', true)
+  .order('sort_order')
 
-  // Last 3 completed visits (excluding current) with water data for trend
-const { data: historyRaw } = await locals.supabase
+const { data: historyRaw } = await admin
   .from('visits')
-  .select(`
-    id,
-    scheduled_date,
-    visit_checklists ( ph, chlorine, alkalinity, stabiliser, salt, calcium_hardness )
-  `)
+  .select(`id, scheduled_date, visit_checklists ( ph, chlorine, alkalinity, stabiliser, salt, calcium_hardness )`)
   .eq('property_id', visit.property_id)
+  .eq('org_id', locals.user!.org_id)
   .eq('status', 'completed')
   .neq('id', params.id)
   .lt('scheduled_date', new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' }))
@@ -61,6 +57,8 @@ return { visit, checklist: checklist ?? null, fromRoute, services, chemicals, vi
 
 export const actions: Actions = {
   save: async ({ request, params, url }) => {
+      const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
     const fromRoute = url.searchParams.get('from') === 'route'
     const form = await request.formData()
 

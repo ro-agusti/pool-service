@@ -82,7 +82,7 @@ let { visit, checklist, visitHistory, fromRoute: fr, services, chemicals: chemic
     salt:             String(checklist?.salt ?? ''),
     calcium_hardness: String(checklist?.calcium_hardness ?? ''),
   })
-
+let volL = $derived(visit.properties?.pool_volume_litres ?? null)
   function getStatus(name: string, min: number, max: number): 'ok' | 'low' | 'high' | 'empty' {
     const v = parseFloat(values[name])
     if (isNaN(v) || values[name] === '') return 'empty'
