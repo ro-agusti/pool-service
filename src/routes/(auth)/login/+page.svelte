@@ -12,12 +12,15 @@
 
     <!-- Logo -->
     <div class="text-center mb-8">
-      <div class="inline-flex items-center gap-2 mb-2">
+      <a href="./" class="inline-flex items-center gap-2 mb-2 ">
+      
         <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
           <span class="text-white text-sm font-bold">C</span>
         </div>
         <span class="text-xl font-semibold text-text">ClearWave</span>
-      </div>
+      
+        
+      </a>
       <p class="text-muted text-sm">Sign in to your account</p>
     </div>
 

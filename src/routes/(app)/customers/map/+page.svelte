@@ -276,7 +276,14 @@
               value={JSON.stringify(
                 recommendations
                   .filter((r: any) => selectedRecs.has(r.propertyId))
-                  .map((r: any) => ({ planId: r.planId, propertyId: r.propertyId, technicianId: r.suggestedTechId }))
+                 .map((r: any) => {
+  const prop = properties.find((p: any) => p.id === r.propertyId)
+  return { 
+    planId: prop?.active_plan?.id ?? null, 
+    propertyId: r.propertyId, 
+    technicianId: r.suggestedTechId 
+  }
+})
               )} />
             <button type="submit" disabled={applyingRecs || selectedRecs.size === 0}
               class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50">
