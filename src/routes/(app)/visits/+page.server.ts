@@ -175,5 +175,28 @@ export const actions: Actions = {
       old_status: 'pending',
       new_status: 'cancelled'
     })
-  }
+  },
+
+  moveToDay: async ({ request, locals }) => {
+  const form = await request.formData()
+  const visitId     = form.get('visitId') as string
+  const targetDate  = form.get('targetDate') as string
+  const oldDate     = form.get('oldDate') as string
+  const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+  await admin.from('visits')
+    .update({ scheduled_date: targetDate, status: 'pending' })
+    .eq('id', visitId)
+
+  await admin.from('visit_logs').insert({
+    visit_id: visitId,
+    org_id: locals.user!.org_id,
+    changed_by: locals.user!.id,
+    old_date: oldDate,
+    new_date: targetDate,
+    old_status: 'skipped',
+    new_status: 'pending',
+    reason: 'Moved from backlog'
+  })
+}
 }

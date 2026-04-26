@@ -365,6 +365,18 @@
                 <span class="text-xs px-2 py-0.5 rounded-full border capitalize {statusColors[visit.status]}">
                   {visit.status}
                 </span>
+                <form method="POST" action="?/moveToDay" use:enhance={() => {
+    return async ({ update }) => { await update() }
+  }}>
+    <input type="hidden" name="visitId" value={visit.id} />
+    <input type="hidden" name="targetDate" value={selectedDate} />
+    <input type="hidden" name="oldDate" value={visit.scheduled_date} />
+    <button type="submit"
+      class="px-2 py-1 text-xs text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors"
+      title="Move to {selectedDate}">
+      → {selectedDate === today ? 'Today' : selectedDate}
+    </button>
+  </form>
                 <form method="POST" action="?/cancelVisit" use:enhance={() => {
                   return async ({ update }) => { await update() }
                 }}>
