@@ -11,7 +11,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 
   const { data: member } = await admin
     .from('users')
-    .select('id, name, email, role, phone, active')
+    .select('id, name, email, role, phone, active, address, working_days')
     .eq('id', params.userId)
     .eq('org_id', locals.user!.org_id)
     .single()
@@ -48,21 +48,25 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 }
 
 export const actions: Actions = {
-  updateMember: async ({ request, params, locals }) => {
-    const form = await request.formData()
-    const name = form.get('name') as string
-    const phone = form.get('phone') as string | null
-    const email = form.get('email') as string
+  updateMember: async ({ request, params }) => {
+  const form = await request.formData()
+  const name        = form.get('name') as string
+  const phone       = form.get('phone') as string | null
+  const email       = form.get('email') as string
+  const address     = form.get('address') as string | null
+  const workingDays = form.getAll('working_days').map(Number)
 
-    const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+  const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    await admin.from('users').update({ name, phone, email }).eq('id', params.userId)
+  await admin.from('users').update({
+    name, phone, email, address,
+    working_days: workingDays.length > 0 ? workingDays : [1,2,3,4,5]
+  }).eq('id', params.userId)
 
-    // Update email in auth too
-    if (email) {
-      await admin.auth.admin.updateUserById(params.userId, { email })
-    }
-  },
+  if (email) {
+    await admin.auth.admin.updateUserById(params.userId, { email })
+  }
+},
 
   markAway: async ({ request, params, locals }) => {
     const form = await request.formData()

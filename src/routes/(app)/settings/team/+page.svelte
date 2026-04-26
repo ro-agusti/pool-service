@@ -1,6 +1,7 @@
 <script lang="ts">
   import { enhance } from '$app/forms'
   import { page } from '$app/state'
+  import { PUBLIC_GOOGLE_MAPS_KEY } from '$env/static/public'
   import type { PageData, ActionData } from './$types'
 
   let { data, form }: { data: PageData, form: ActionData } = $props()
@@ -10,15 +11,48 @@
   let name = $state('')
   let email = $state('')
   let password = $state('')
+  let phone = $state('')
+  let address = $state('')
+  let workingDays = $state<number[]>([1,2,3,4,5])
   let showPassword = $state(false)
   let confirmDeleteId = $state<string | null>(null)
   let loading = $state(false)
 
+  const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
   const currentUserId = $derived(page.data.user?.id)
+
+  let newAddressInput: HTMLInputElement
+
+  function initNewMemberMaps() {
+    if (!newAddressInput) return
+    const autocomplete = new (window as any).google.maps.places.Autocomplete(newAddressInput, {
+      componentRestrictions: { country: 'au' },
+      fields: ['formatted_address'],
+      types: ['address']
+    })
+    autocomplete.addListener('place_changed', () => {
+      const place = autocomplete.getPlace()
+      if (place.formatted_address) address = place.formatted_address
+    })
+  }
+
+  function loadNewMemberMaps() {
+    if ((window as any).google?.maps?.places) {
+      initNewMemberMaps()
+      return
+    }
+    ;(window as any).initNewMemberMaps = initNewMemberMaps
+    const script = document.createElement('script')
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${PUBLIC_GOOGLE_MAPS_KEY}&libraries=places&callback=initNewMemberMaps`
+    script.async = true
+    script.defer = true
+    document.head.appendChild(script)
+  }
 
   function cancelForm() {
     showForm = false
-    name = ''; email = ''; password = ''
+    name = ''; email = ''; password = ''; phone = ''; address = ''
+    workingDays = [1,2,3,4,5]
   }
 
   const roleColors: Record<string, string> = {
@@ -35,21 +69,19 @@
       <p class="text-sm text-muted">Manage technicians in your organisation</p>
     </div>
     {#if !showForm}
-      <button onclick={() => showForm = true}
+      <button onclick={() => { showForm = true; setTimeout(() => loadNewMemberMaps(), 50) }}
         class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors">
         + Add technician
       </button>
     {/if}
   </div>
 
-  <!-- Error from action -->
   {#if form?.error}
     <div class="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-danger">
       {form.error}
     </div>
   {/if}
 
-  <!-- Add technician form -->
   {#if showForm}
     <div class="bg-card border border-border rounded-xl p-4 mb-6">
       <h2 class="text-sm font-medium text-text mb-4">New technician</h2>
@@ -89,6 +121,38 @@
             </div>
             <p class="text-xs text-muted mt-1">Share this with the technician — they can reset it later</p>
           </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">Phone</label>
+            <input type="text" name="phone" bind:value={phone} placeholder="0400 000 000"
+              class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary" />
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">Address</label>
+            <input type="text" name="address" bind:value={address} bind:this={newAddressInput}
+              placeholder="Start typing an address…"
+              class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary" />
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-2">Working days</label>
+            <div class="flex gap-1.5 flex-wrap">
+              {#each dayLabels as label, d}
+                <label class="cursor-pointer">
+                  <input type="checkbox" name="working_days" value={d}
+                    checked={workingDays.includes(d)}
+                    onchange={() => {
+                      workingDays = workingDays.includes(d)
+                        ? workingDays.filter(x => x !== d)
+                        : [...workingDays, d].sort()
+                    }}
+                    class="sr-only" />
+                  <span class="inline-block px-2.5 py-1 text-xs rounded-lg border transition-colors
+                    {workingDays.includes(d) ? 'bg-primary text-white border-primary' : 'border-border text-muted hover:bg-surface'}">
+                    {label}
+                  </span>
+                </label>
+              {/each}
+            </div>
+          </div>
         </div>
         <div class="flex gap-2 mt-4">
           <button type="submit" disabled={loading}
@@ -104,7 +168,6 @@
     </div>
   {/if}
 
-  <!-- Team list -->
   {#if team.length === 0}
     <div class="bg-card border border-border rounded-xl p-8 text-center text-muted text-sm">
       No team members yet
@@ -112,46 +175,49 @@
   {:else}
     <div class="bg-card border border-border rounded-xl overflow-hidden">
       {#each team as member, i}
-  <div class="px-4 py-3 flex items-center gap-3 {i !== 0 ? 'border-t border-border' : ''}">
-    <a href="/settings/team/{member.id}" class="flex items-center gap-3 flex-1 min-w-0 hover:opacity-80 transition-opacity">
-      <div class="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-        <span class="text-sm font-medium text-primary">{member.name?.charAt(0).toUpperCase() ?? '?'}</span>
-      </div>
-      <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2">
-          <p class="text-sm font-medium text-text truncate">{member.name}</p>
-          {#if member.id === currentUserId}
-            <span class="text-xs text-muted">(you)</span>
-          {/if}
+        <div class="px-4 py-3 flex items-center gap-3 {i !== 0 ? 'border-t border-border' : ''}">
+          <a href="/settings/team/{member.id}" class="flex items-center gap-3 flex-1 min-w-0 hover:opacity-80 transition-opacity">
+            <div class="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <span class="text-sm font-medium text-primary">{member.name?.charAt(0).toUpperCase() ?? '?'}</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-medium text-text truncate">{member.name}</p>
+                {#if member.id === currentUserId}
+                  <span class="text-xs text-muted">(you)</span>
+                {/if}
+              </div>
+              <p class="text-xs text-muted truncate">{member.email}</p>
+              {#if member.phone}
+                <p class="text-xs text-muted">{member.phone}</p>
+              {/if}
+            </div>
+          </a>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <span class="text-xs px-2 py-0.5 rounded-full border capitalize {roleColors[member.role] ?? 'bg-slate-100 text-slate-500 border-slate-200'}">
+              {member.role}
+            </span>
+            {#if member.id !== currentUserId && member.role !== 'admin'}
+              {#if confirmDeleteId === member.id}
+                <form method="POST" action="?/deleteTechnician" use:enhance={() => {
+                  return async ({ update }) => { await update(); confirmDeleteId = null }
+                }} class="flex items-center gap-1">
+                  <input type="hidden" name="userId" value={member.id} />
+                  <span class="text-xs text-muted">Sure?</span>
+                  <button type="submit" class="text-xs px-2 py-1 bg-danger text-white rounded-lg">Yes</button>
+                  <button type="button" onclick={() => confirmDeleteId = null}
+                    class="text-xs px-2 py-1 border border-border rounded-lg hover:bg-surface">No</button>
+                </form>
+              {:else}
+                <button onclick={() => confirmDeleteId = member.id}
+                  class="p-1.5 text-muted hover:text-danger border border-border rounded-lg hover:bg-red-50 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                </button>
+              {/if}
+            {/if}
+          </div>
         </div>
-        <p class="text-xs text-muted truncate">{member.email}</p>
-      </div>
-    </a>
-    <div class="flex items-center gap-2 flex-shrink-0">
-      <span class="text-xs px-2 py-0.5 rounded-full border capitalize {roleColors[member.role] ?? 'bg-slate-100 text-slate-500 border-slate-200'}">
-        {member.role}
-      </span>
-      {#if member.id !== currentUserId && member.role !== 'admin'}
-        {#if confirmDeleteId === member.id}
-          <form method="POST" action="?/deleteTechnician" use:enhance={() => {
-            return async ({ update }) => { await update(); confirmDeleteId = null }
-          }} class="flex items-center gap-1">
-            <input type="hidden" name="userId" value={member.id} />
-            <span class="text-xs text-muted">Sure?</span>
-            <button type="submit" class="text-xs px-2 py-1 bg-danger text-white rounded-lg">Yes</button>
-            <button type="button" onclick={() => confirmDeleteId = null}
-              class="text-xs px-2 py-1 border border-border rounded-lg hover:bg-surface">No</button>
-          </form>
-        {:else}
-          <button onclick={() => confirmDeleteId = member.id}
-            class="p-1.5 text-muted hover:text-danger border border-border rounded-lg hover:bg-red-50 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-          </button>
-        {/if}
-      {/if}
-    </div>
-  </div>
-{/each}
+      {/each}
     </div>
   {/if}
 </div>
