@@ -2,10 +2,17 @@
   import { enhance } from '$app/forms'
   import type { PageData } from './$types'
 
-  let { data }: { data: PageData } = $props()
-  let { visit, orgSettings, invoice, lines, total, fromCustomer } = $derived(data)
+  let { data, form }: { data: PageData; form: any } = $props()
+  let { visit, orgSettings, invoice, lines, total, fromCustomer, xeroConnected } = $derived(data)
 
   let generating = $state(false)
+  let syncing = $state(false)
+
+  const xeroSuccess = $derived(
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('xeroSuccess') === '1'
+      : false
+  )
 
   function formatDate(d: string) {
     return new Date(d + 'T00:00:00').toLocaleDateString('en-AU', {
@@ -22,7 +29,6 @@
       const doc = new jsPDF()
       const pageW = doc.internal.pageSize.getWidth()
 
-      // Logo (if available)
       let headerY = 20
       if (orgSettings?.logo_url) {
         try {
@@ -44,7 +50,6 @@
         } catch { /* skip logo on error */ }
       }
 
-      // Business name + INVOICE label
       doc.setFontSize(20)
       doc.setTextColor(15, 23, 42)
       doc.text('INVOICE', pageW - 15, 20, { align: 'right' })
@@ -64,7 +69,6 @@
         doc.text(addr, 15, infoY); infoY += 5
       }
 
-      // Invoice meta (right side)
       doc.setFontSize(9)
       doc.setTextColor(100, 116, 139)
       let metaY = 28
@@ -84,7 +88,6 @@
       doc.setDrawColor(226, 232, 240)
       doc.line(15, dividerY, pageW - 15, dividerY)
 
-      // Bill to
       let billY = dividerY + 8
       doc.setFontSize(8)
       doc.setTextColor(100, 116, 139)
@@ -100,7 +103,6 @@
         billY += 5
       }
 
-      // Items table
       autoTable(doc, {
         startY: billY + 6,
         head: [['Description', 'Qty', 'Unit', 'Unit Price', 'Total']],
@@ -151,6 +153,22 @@
     <p class="text-sm text-muted">{visit.properties?.customers?.name} · {formatDate(visit.scheduled_date)}</p>
   </div>
 
+  <!-- Xero success banner -->
+  {#if xeroSuccess}
+    <div class="mb-4 flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+      Invoice synced to Xero successfully.
+    </div>
+  {/if}
+
+  <!-- Xero error banner -->
+  {#if form?.xeroError}
+    <div class="mb-4 flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      {form.xeroError}
+    </div>
+  {/if}
+
   {#if lines.length === 0}
     <div class="bg-card border border-border rounded-xl p-8 text-center mb-6">
       <p class="text-sm font-medium text-text mb-1">No items found</p>
@@ -195,6 +213,22 @@
                 {invoice.status}
               </span>
             {/if}
+            <!-- Xero sync badge -->
+            {#if invoice?.xero_invoice_id}
+  <div class="flex items-center justify-end gap-1 mt-2">
+    <div class="w-4 h-4 rounded bg-[#13B5EA] flex items-center justify-center">
+      <span class="text-white text-[9px] font-bold leading-none">X</span>
+    </div>
+    <a
+      href="https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID={invoice.xero_invoice_id}"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="text-xs text-[#0891B2] underline hover:text-[#13B5EA] transition-colors"
+    >
+      View in Xero →
+    </a>
+  </div>
+{/if}
           </div>
         </div>
       </div>
@@ -264,6 +298,33 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
             Send by email
           </a>
+        {/if}
+
+        <!-- Sync to Xero -->
+        {#if xeroConnected && !invoice.xero_invoice_id}
+          <form method="POST" action="?/syncXero" use:enhance={() => {
+            syncing = true
+            return async ({ update }) => {
+              await update()
+              syncing = false
+            }
+          }}>
+            {#if fromCustomer}
+              <input type="hidden" name="fromCustomer" value={fromCustomer} />
+            {/if}
+            <button type="submit" disabled={syncing}
+              class="w-full flex items-center justify-center gap-2 py-3 border border-[#13B5EA] text-[#0891B2] bg-sky-50 text-sm font-medium rounded-xl hover:bg-sky-100 transition-colors disabled:opacity-50">
+              {#if syncing}
+                <svg class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                Syncing…
+              {:else}
+                <div class="w-4 h-4 rounded bg-[#13B5EA] flex items-center justify-center">
+                  <span class="text-white text-[9px] font-bold leading-none">X</span>
+                </div>
+                Sync to Xero
+              {/if}
+            </button>
+          </form>
         {/if}
 
         {#if invoice.status === 'pending'}

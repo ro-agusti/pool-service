@@ -7,6 +7,7 @@
   <h1 class="text-xl font-semibold text-text mb-6">Settings</h1>
 
   <div class="bg-card border border-border rounded-xl overflow-hidden">
+
     <a href="/settings/business"
       class="flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors border-b border-border">
       <div class="flex items-center gap-3">
@@ -20,6 +21,7 @@
       </div>
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
     </a>
+
     <a href="/settings/products"
       class="flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors border-b border-border">
       <div class="flex items-center gap-3">
@@ -33,8 +35,9 @@
       </div>
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
     </a>
+
     <a href="/settings/team"
-      class="flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors">
+      class="flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors border-b border-border">
       <div class="flex items-center gap-3">
         <div class="w-8 h-8 rounded-full bg-violet-50 flex items-center justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -46,5 +49,20 @@
       </div>
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
     </a>
+
+    <a href="/settings/integrations"
+      class="flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.102m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+        </div>
+        <div>
+          <p class="text-sm font-medium text-text">Integrations</p>
+          <p class="text-xs text-muted">Connect Xero and other tools</p>
+        </div>
+      </div>
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+    </a>
+
   </div>
 </div>
