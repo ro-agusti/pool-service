@@ -1,3 +1,4 @@
+<!-- src/routes/(app)/settings/team/+page.svelte -->
 <script lang="ts">
   import { enhance } from '$app/forms'
   import { page } from '$app/state'
@@ -55,9 +56,8 @@
     workingDays = [1,2,3,4,5]
   }
 
-  const roleColors: Record<string, string> = {
-    admin:      'bg-violet-50 text-violet-600 border-violet-200',
-    technician: 'bg-sky-50 text-sky-600 border-sky-200',
+  function formatDate(d: string) {
+    return new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
   }
 </script>
 
@@ -175,47 +175,70 @@
   {:else}
     <div class="bg-card border border-border rounded-xl overflow-hidden">
       {#each team as member, i}
-        <div class="px-4 py-3 flex items-center gap-3 {i !== 0 ? 'border-t border-border' : ''}">
+        <div class="px-4 py-3 flex items-center gap-3 {i !== 0 ? 'border-t border-border' : ''}
+          {member.status === 'deactivated' ? 'opacity-60' : ''}">
+
           <a href="/settings/team/{member.id}" class="flex items-center gap-3 flex-1 min-w-0 hover:opacity-80 transition-opacity">
-            <div class="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-              <span class="text-sm font-medium text-primary">{member.name?.charAt(0).toUpperCase() ?? '?'}</span>
+            <!-- Avatar -->
+            <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0
+              {member.status === 'deactivated' ? 'bg-red-50' :
+               member.status === 'away' ? 'bg-amber-50' : 'bg-primary/10'}">
+              <span class="text-sm font-medium
+                {member.status === 'deactivated' ? 'text-red-400' :
+                 member.status === 'away' ? 'text-amber-500' : 'text-primary'}">
+                {member.name?.charAt(0).toUpperCase() ?? '?'}
+              </span>
             </div>
+
             <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
                 <p class="text-sm font-medium text-text truncate">{member.name}</p>
                 {#if member.id === currentUserId}
                   <span class="text-xs text-muted">(you)</span>
                 {/if}
+                <!-- Status badge -->
+                {#if member.status === 'away'}
+                  <span class="text-xs px-2 py-0.5 rounded-full border bg-amber-50 text-amber-600 border-amber-200 flex-shrink-0">
+                    Away · {formatDate(member.away_from)} – {formatDate(member.away_to)}
+                  </span>
+                {:else if member.status === 'deactivated'}
+                  <span class="text-xs px-2 py-0.5 rounded-full border bg-red-50 text-red-500 border-red-200 flex-shrink-0">
+                    Deactivated
+                  </span>
+                {:else if member.role === 'admin'}
+                  <span class="text-xs px-2 py-0.5 rounded-full border bg-violet-50 text-violet-600 border-violet-200 flex-shrink-0">
+                    Admin
+                  </span>
+                {:else}
+                  <span class="text-xs px-2 py-0.5 rounded-full border bg-sky-50 text-sky-600 border-sky-200 flex-shrink-0">
+                    Technician
+                  </span>
+                {/if}
               </div>
               <p class="text-xs text-muted truncate">{member.email}</p>
-              {#if member.phone}
-                <p class="text-xs text-muted">{member.phone}</p>
-              {/if}
             </div>
           </a>
-          <div class="flex items-center gap-2 flex-shrink-0">
-            <span class="text-xs px-2 py-0.5 rounded-full border capitalize {roleColors[member.role] ?? 'bg-slate-100 text-slate-500 border-slate-200'}">
-              {member.role}
-            </span>
-            {#if member.id !== currentUserId && member.role !== 'admin'}
-              {#if confirmDeleteId === member.id}
-                <form method="POST" action="?/deleteTechnician" use:enhance={() => {
-                  return async ({ update }) => { await update(); confirmDeleteId = null }
-                }} class="flex items-center gap-1">
-                  <input type="hidden" name="userId" value={member.id} />
-                  <span class="text-xs text-muted">Sure?</span>
-                  <button type="submit" class="text-xs px-2 py-1 bg-danger text-white rounded-lg">Yes</button>
-                  <button type="button" onclick={() => confirmDeleteId = null}
-                    class="text-xs px-2 py-1 border border-border rounded-lg hover:bg-surface">No</button>
-                </form>
-              {:else}
-                <button onclick={() => confirmDeleteId = member.id}
-                  class="p-1.5 text-muted hover:text-danger border border-border rounded-lg hover:bg-red-50 transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-                </button>
-              {/if}
+
+          <!-- Delete (only for deactivated non-admin) -->
+          {#if member.status === 'deactivated' && member.role !== 'admin' && member.id !== currentUserId}
+            {#if confirmDeleteId === member.id}
+              <form method="POST" action="?/deleteTechnician" use:enhance={() => {
+                return async ({ update }) => { await update(); confirmDeleteId = null }
+              }} class="flex items-center gap-1">
+                <input type="hidden" name="userId" value={member.id} />
+                <span class="text-xs text-muted">Sure?</span>
+                <button type="submit" class="text-xs px-2 py-1 bg-danger text-white rounded-lg">Yes</button>
+                <button type="button" onclick={() => confirmDeleteId = null}
+                  class="text-xs px-2 py-1 border border-border rounded-lg hover:bg-surface">No</button>
+              </form>
+            {:else}
+              <button onclick={() => confirmDeleteId = member.id}
+                class="p-1.5 text-muted hover:text-danger border border-border rounded-lg hover:bg-red-50 transition-colors"
+                title="Delete permanently">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+              </button>
             {/if}
-          </div>
+          {/if}
         </div>
       {/each}
     </div>

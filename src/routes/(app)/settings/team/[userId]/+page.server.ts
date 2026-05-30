@@ -1,3 +1,4 @@
+// src/routes/(app)/settings/team/[userId]/+page.server.ts
 import { error, redirect } from '@sveltejs/kit'
 import { createClient } from '@supabase/supabase-js'
 import { PUBLIC_SUPABASE_URL } from '$env/static/public'
@@ -8,17 +9,25 @@ export const load: PageServerLoad = async ({ locals, params }) => {
   if (locals.user?.role !== 'admin') throw redirect(303, '/settings')
 
   const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' })
 
   const { data: member } = await admin
     .from('users')
-    .select('id, name, email, role, phone, active, address, working_days')
+    .select('id, name, email, role, phone, active, address, working_days, away_from, away_to')
     .eq('id', params.userId)
     .eq('org_id', locals.user!.org_id)
     .single()
 
   if (!member) throw error(404, 'Team member not found')
 
-  // Properties assigned via active service plans
+  // Compute status
+  let status: 'active' | 'away' | 'deactivated' = 'active'
+  if (member.active === false) {
+    status = 'deactivated'
+  } else if (member.away_from && member.away_to && today <= member.away_to) {
+    status = 'away'
+  }
+
   const { data: plans } = await admin
     .from('service_plans')
     .select(`
@@ -31,8 +40,6 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     .eq('technician_id', params.userId)
     .eq('active', true)
 
-  // Count pending future visits
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' })
   const { count: pendingVisits } = await admin
     .from('visits')
     .select('*', { count: 'exact', head: true })
@@ -41,7 +48,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     .gte('scheduled_date', today)
 
   return {
-    member,
+    member: { ...member, status },
     plans: plans ?? [],
     pendingVisits: pendingVisits ?? 0
   }
@@ -49,34 +56,39 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 
 export const actions: Actions = {
   updateMember: async ({ request, params }) => {
-  const form = await request.formData()
-  const name        = form.get('name') as string
-  const phone       = form.get('phone') as string | null
-  const email       = form.get('email') as string
-  const address     = form.get('address') as string | null
-  const workingDays = form.getAll('working_days').map(Number)
+    const form = await request.formData()
+    const name        = form.get('name') as string
+    const phone       = form.get('phone') as string | null
+    const email       = form.get('email') as string
+    const address     = form.get('address') as string | null
+    const workingDays = form.getAll('working_days').map(Number)
 
-  const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-  await admin.from('users').update({
-    name, phone, email, address,
-    working_days: workingDays.length > 0 ? workingDays : [1,2,3,4,5]
-  }).eq('id', params.userId)
+    await admin.from('users').update({
+      name, phone, email, address,
+      working_days: workingDays.length > 0 ? workingDays : [1,2,3,4,5]
+    }).eq('id', params.userId)
 
-  if (email) {
-    await admin.auth.admin.updateUserById(params.userId, { email })
-  }
-},
+    if (email) {
+      await admin.auth.admin.updateUserById(params.userId, { email })
+    }
+  },
 
   markAway: async ({ request, params, locals }) => {
     const form = await request.formData()
     const fromDate = form.get('fromDate') as string
-    const toDate = form.get('toDate') as string
+    const toDate   = form.get('toDate') as string
 
-    const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    const admin  = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     const adminId = locals.user!.id
 
-    // Skip all pending visits in the date range for this technician
+    // Save away period on user
+    await admin.from('users')
+      .update({ away_from: fromDate, away_to: toDate })
+      .eq('id', params.userId)
+
+    // Skip all pending visits in the range
     const { data: visitsToSkip } = await admin
       .from('visits')
       .select('id')
@@ -87,12 +99,9 @@ export const actions: Actions = {
 
     if (visitsToSkip && visitsToSkip.length > 0) {
       const ids = visitsToSkip.map((v: any) => v.id)
-
       await admin.from('visits')
         .update({ status: 'skipped', skip_reason: 'Technician away' })
         .in('id', ids)
-
-      // Log each
       await admin.from('visit_logs').insert(
         ids.map((id: string) => ({
           visit_id: id,
@@ -108,26 +117,71 @@ export const actions: Actions = {
     throw redirect(303, `/settings/team/${params.userId}`)
   },
 
-  deactivate: async ({ request, params, locals }) => {
-    const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+  cancelAway: async ({ params, locals }) => {
+    const admin  = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     const adminId = locals.user!.id
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' })
 
-    // Get all active plans assigned to this technician
+    // Get away period before clearing it
+    const { data: member } = await admin
+      .from('users')
+      .select('away_from, away_to')
+      .eq('id', params.userId)
+      .single()
+
+    // Reactivate skipped visits in the away period
+    if (member?.away_from && member?.away_to) {
+      const { data: visitsToRestore } = await admin
+        .from('visits')
+        .select('id')
+        .eq('technician_id', params.userId)
+        .eq('status', 'skipped')
+        .eq('skip_reason', 'Technician away')
+        .gte('scheduled_date', member.away_from)
+        .lte('scheduled_date', member.away_to)
+
+      if (visitsToRestore && visitsToRestore.length > 0) {
+        const ids = visitsToRestore.map((v: any) => v.id)
+        await admin.from('visits')
+          .update({ status: 'pending', skip_reason: null })
+          .in('id', ids)
+        await admin.from('visit_logs').insert(
+          ids.map((id: string) => ({
+            visit_id: id,
+            org_id: locals.user!.org_id,
+            changed_by: adminId,
+            old_status: 'skipped',
+            new_status: 'pending',
+            reason: 'Away period cancelled'
+          }))
+        )
+      }
+    }
+
+    // Clear away period
+    await admin.from('users')
+      .update({ away_from: null, away_to: null })
+      .eq('id', params.userId)
+
+    throw redirect(303, `/settings/team/${params.userId}`)
+  },
+
+  deactivate: async ({ params, locals }) => {
+    const admin   = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    const adminId = locals.user!.id
+    const today   = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' })
+
     const { data: plans } = await admin
       .from('service_plans')
       .select('id, property_id, recurrence, preferred_day_of_week, preferred_time, start_date')
       .eq('technician_id', params.userId)
       .eq('active', true)
 
-    // Reassign all active service plans to admin
     if (plans && plans.length > 0) {
       await admin.from('service_plans')
         .update({ technician_id: adminId })
         .eq('technician_id', params.userId)
         .eq('active', true)
 
-      // Delete future pending visits and regenerate for admin
       for (const plan of plans) {
         await admin.from('visits')
           .delete()
@@ -143,17 +197,26 @@ export const actions: Actions = {
       }
     }
 
-    // Mark user as inactive in users table
-    await admin.from('users').update({ active: false }).eq('id', params.userId)
-
-    // Disable auth login
+    await admin.from('users').update({ active: false, away_from: null, away_to: null }).eq('id', params.userId)
     await admin.auth.admin.updateUserById(params.userId, { ban_duration: '876600h' })
 
     throw redirect(303, '/settings/team')
+  },
+
+  reactivate: async ({ params }) => {
+    const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+    await admin.from('users')
+      .update({ active: true, away_from: null, away_to: null })
+      .eq('id', params.userId)
+
+    await admin.auth.admin.updateUserById(params.userId, { ban_duration: 'none' })
+
+    throw redirect(303, `/settings/team/${params.userId}`)
   }
 }
 
-// ─── Helpers ───────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function dowOf(y: number, m: number, d: number): number {
   const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
