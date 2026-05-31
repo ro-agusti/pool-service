@@ -1,10 +1,15 @@
 <script lang="ts">
   import { page } from '$app/state'
+  import { onMount } from 'svelte'
   import type { LayoutData } from './$types'
+  import { getQueue, dequeue, incrementRetry } from '$lib/offline/queue'
 
   let { data, children }: { data: LayoutData, children: any } = $props()
 
   const isAdmin = $derived(data.user?.role === 'admin')
+
+  let isOnline = $state(true)
+  let syncing = $state(false)
 
   const allNavItems = [
     {
@@ -38,18 +43,62 @@
   function isActive(href: string): boolean {
     return page.url.pathname.startsWith(href)
   }
+
+  onMount(() => {
+    isOnline = navigator.onLine
+
+    async function syncQueue() {
+      if (!navigator.onLine) return
+      const queue = await getQueue()
+      if (queue.length === 0) return
+      syncing = true
+      for (const action of queue) {
+        if (action.retries >= 3) { await dequeue(action.id); continue }
+        try {
+          const res = await fetch('/api/offline/sync-checklist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(action.payload)
+          })
+          if (res.ok) await dequeue(action.id)
+          else await incrementRetry(action.id)
+        } catch {
+          await incrementRetry(action.id)
+        }
+      }
+      syncing = false
+    }
+
+    window.addEventListener('online', () => { isOnline = true; syncQueue() })
+    window.addEventListener('offline', () => { isOnline = false })
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && navigator.onLine) syncQueue()
+    })
+  })
 </script>
 
 <div class="min-h-screen bg-surface">
+
+  <!-- Offline / syncing indicator -->
+  {#if !isOnline}
+    <div class="fixed top-0 inset-x-0 z-[60] bg-amber-500 text-white text-xs text-center py-1.5 font-medium">
+      🟡 Offline — changes saving locally
+    </div>
+  {:else if syncing}
+    <div class="fixed top-0 inset-x-0 z-[60] bg-sky-500 text-white text-xs text-center py-1.5 font-medium">
+      🔄 Syncing...
+    </div>
+  {/if}
+
   <!-- Top nav — desktop only -->
   <nav class="hidden md:flex bg-card border-b border-border px-6 py-3 items-center justify-between">
     <div class="flex items-center gap-6">
-      <div class="flex items-center gap-2">
-        <div class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-          <span class="text-white text-xs font-bold">C</span>
-        </div>
-        <span class="font-semibold text-text">ClearWave</span>
-      </div>
+      <a href="/" class="flex items-center gap-2">
+  <div class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+    <span class="text-white text-xs font-bold">C</span>
+  </div>
+  <span class="font-semibold text-text">ClearWave</span>
+</a>
       <nav class="flex items-center gap-1">
         {#each navItems as item}
           <a href={item.href}
@@ -70,12 +119,12 @@
 
   <!-- Top bar mobile -->
   <div class="md:hidden bg-card border-b border-border px-4 py-3 flex items-center justify-between">
-    <div class="flex items-center gap-2">
-      <div class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-        <span class="text-white text-xs font-bold">C</span>
-      </div>
-      <span class="font-semibold text-text">ClearWave</span>
-    </div>
+    <a href="/" class="flex items-center gap-2">
+  <div class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+    <span class="text-white text-xs font-bold">C</span>
+  </div>
+  <span class="font-semibold text-text">ClearWave</span>
+</a>
     <form method="POST" action="/logout">
       <button type="submit" class="text-sm text-muted hover:text-text transition-colors">Sign out</button>
     </form>

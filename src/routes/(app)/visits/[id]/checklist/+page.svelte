@@ -4,6 +4,9 @@
   import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public'
   import { onMount } from 'svelte'
   import type { PageData } from './$types'
+  import { enqueue } from '$lib/offline/queue'
+
+let savedOffline = $state(false)
 
   let { data }: { data: PageData } = $props()
 let { visit, checklist, visitHistory, fromRoute: fr, services, chemicals: chemicalProducts } = $derived(data)
@@ -365,10 +368,37 @@ function applyRecToChemical(paramName: string) {
     {/if}
   </div>
 
-  <form method="POST" action="?/save{fromRoute ? '&from=route' : ''}" novalidate use:enhance={() => {
+  <form
+  method="POST"
+  action="?/save{fromRoute ? '&from=route' : ''}"
+  novalidate
+  use:enhance={() => {
+    if (!navigator.onLine) return  // el onsubmit de abajo lo maneja
     loading = true
     return async ({ update }) => { await update(); loading = false }
-  }}>
+  }}
+  onsubmit={async (e) => {
+    if (!navigator.onLine) {
+      e.preventDefault()
+      loading = true
+      await enqueue({
+        visitId: visit.id,
+        photos: JSON.stringify(photos),
+        tasks_completed: JSON.stringify([...tasksChecked]),
+        chemicals_added: JSON.stringify(
+          chemLines
+            .filter(c => c.amount !== '' && parseFloat(c.amount) > 0)
+            .map(c => ({ product_id: c.product_id, name: c.name, unit: c.unit, unit_price: c.unit_price, amount: parseFloat(c.amount) }))
+        ),
+        ph: values.ph, chlorine: values.chlorine, alkalinity: values.alkalinity,
+        stabiliser: values.stabiliser, salt: values.salt, calcium_hardness: values.calcium_hardness,
+        notes: (document.getElementById('notes') as HTMLTextAreaElement)?.value ?? ''
+      })
+      loading = false
+      savedOffline = true
+    }
+  }}
+>
     <input type="hidden" name="photos" value={JSON.stringify(photos)} />
     <input type="hidden" name="tasks_completed" value={JSON.stringify([...tasksChecked])} />
     <input type="hidden" name="chemicals_added" value={JSON.stringify(
@@ -649,10 +679,20 @@ function applyRecToChemical(paramName: string) {
         </div>
       {/if}
 
-      <button type="submit" disabled={loading}
-        class="w-full py-3 bg-primary text-white text-sm font-medium rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-50">
-        {loading ? 'Saving…' : checklist ? 'Update checklist' : 'Save checklist'}
-      </button>
+      {#if savedOffline}
+  <div class="w-full py-3 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium rounded-xl text-center">
+    ✓ Saved locally — will sync when back online
+  </div>
+  <button type="button" onclick={() => savedOffline = false}
+    class="w-full py-2 text-xs text-muted hover:text-text transition-colors">
+    Edit again
+  </button>
+{:else}
+  <button type="submit" disabled={loading}
+    class="w-full py-3 bg-primary text-white text-sm font-medium rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-50">
+    {loading ? 'Saving…' : checklist ? 'Update checklist' : 'Save checklist'}
+  </button>
+{/if}
     </div>
   </form>
 </div>
