@@ -1,12 +1,16 @@
+<!-- src/routes/(app)/visits/+page.svelte -->
 <script lang="ts">
   import { enhance } from '$app/forms'
   import { goto } from '$app/navigation'
   import type { PageData } from './$types'
 
   let { data }: { data: PageData } = $props()
-  let { visits, backlog, selectedDate, today, weekDates, monthMap, monthYear } = $derived(data)
+  let { visits, backlog, selectedDate, today, weekDates, weeklyCoverage, monthMap, monthYear, technicians } = $derived(data)
 
-  let view = $state<'day' | 'month'>('day')
+  let rescheduleVisitId = $state<string | null>(null)
+  let rescheduleDate = $state('')
+  let rescheduleTechId = $state('')
+  let view = $state<'day' | 'week' | 'month'>('day')
   let skipVisitId = $state<string | null>(null)
   let skipReason = $state('')
 
@@ -90,8 +94,7 @@
     let ny = y, nm = m + offset
     if (nm > 12) { nm = 1; ny++ }
     if (nm < 1) { nm = 12; ny-- }
-    const newDate = `${ny}-${String(nm).padStart(2,'0')}-01`
-    goto(`?date=${newDate}`)
+    goto(`?date=${ny}-${String(nm).padStart(2,'0')}-01`)
   }
 
   function selectDay(date: string) {
@@ -102,20 +105,136 @@
 
 <div class="max-w-2xl">
 
-  <!-- Toggle Day / Month -->
+  <!-- Toggle -->
   <div class="flex items-center gap-1 mb-4 bg-surface border border-border rounded-lg p-1 w-fit">
-    <button
-      onclick={() => view = 'day'}
-      class="px-3 py-1 text-sm rounded-md transition-colors {view === 'day' ? 'bg-white text-text font-medium shadow-sm' : 'text-muted hover:text-text'}"
-    >Day</button>
-    <button
-      onclick={() => view = 'month'}
-      class="px-3 py-1 text-sm rounded-md transition-colors {view === 'month' ? 'bg-white text-text font-medium shadow-sm' : 'text-muted hover:text-text'}"
-    >Month</button>
+    <button onclick={() => view = 'day'}
+      class="px-3 py-1 text-sm rounded-md transition-colors {view === 'day' ? 'bg-white text-text font-medium shadow-sm' : 'text-muted hover:text-text'}">
+      Day
+    </button>
+    <button onclick={() => view = 'week'}
+      class="px-3 py-1 text-sm rounded-md transition-colors {view === 'week' ? 'bg-white text-text font-medium shadow-sm' : 'text-muted hover:text-text'}">
+      Week
+    </button>
+    <button onclick={() => view = 'month'}
+      class="px-3 py-1 text-sm rounded-md transition-colors {view === 'month' ? 'bg-white text-text font-medium shadow-sm' : 'text-muted hover:text-text'}">
+      Month
+    </button>
   </div>
 
-  {#if view === 'month'}
-    <!-- MONTH VIEW -->
+  <!-- ── WEEK VIEW ── -->
+  {#if view === 'week'}
+    <div class="mb-4 flex items-center justify-between">
+      <div>
+        <h1 class="text-xl font-semibold text-text">Weekly coverage</h1>
+        <p class="text-sm text-muted">
+          {new Date(weekDates[0].date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+          –
+          {new Date(weekDates[6].date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+        </p>
+      </div>
+      <div class="flex gap-1">
+        <button onclick={() => changeWeek(-1)} class="p-2 border border-border rounded-lg text-muted hover:text-text hover:bg-surface transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <button onclick={() => changeWeek(1)} class="p-2 border border-border rounded-lg text-muted hover:text-text hover:bg-surface transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="space-y-3">
+      {#each weeklyCoverage ?? [] as day}
+        {@const dayLabel = day.date === today ? 'Today' : new Date(day.date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' })}
+        {@const totalVisits = day.techGroups.reduce((s: number, t: any) => s + t.visits, 0) + day.unassigned}
+        <div class="bg-card border border-border rounded-xl overflow-hidden">
+          <button onclick={() => selectDay(day.date)}
+            class="w-full flex items-center justify-between px-4 py-3 border-b border-border hover:bg-surface transition-colors text-left">
+            <div class="flex items-center gap-2">
+              <p class="text-sm font-semibold text-text">{dayLabel}</p>
+              {#if day.date === today}
+                <span class="text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">Today</span>
+              {/if}
+            </div>
+            <span class="text-xs text-muted">{totalVisits} visit{totalVisits !== 1 ? 's' : ''}</span>
+          </button>
+          {#if day.unassigned > 0}
+            <div class="px-4 py-2 bg-red-50 border-b border-red-100 flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <p class="text-xs text-red-600 font-medium">{day.unassigned} unassigned visit{day.unassigned !== 1 ? 's' : ''}</p>
+            </div>
+          {/if}
+          <div class="divide-y divide-border">
+            {#each day.techGroups as tech}
+              {#if tech.worksThisDay || tech.visits > 0}
+                <div class="px-4 py-2.5 flex items-start gap-3 {!tech.worksThisDay && tech.visits > 0 ? 'bg-amber-50' : ''}">
+                  <div class="flex-shrink-0 mt-1">
+                    {#if !tech.worksThisDay && tech.visits > 0}
+                      <span title="Day off but has visits">⚠️</span>
+                    {:else if tech.worksThisDay && tech.visits === 0}
+                      <span class="w-2 h-2 rounded-full bg-slate-200 inline-block"></span>
+                    {:else}
+                      <span class="w-2 h-2 rounded-full bg-green-400 inline-block"></span>
+                    {/if}
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <p class="text-sm font-medium text-text">{tech.techName}</p>
+                      {#if !tech.worksThisDay && tech.visits === 0}
+                        <span class="text-xs text-muted">day off</span>
+                      {:else if tech.worksThisDay && tech.visits === 0}
+                        <span class="text-xs text-muted">no visits</span>
+                      {:else}
+                        <span class="text-xs text-muted">{tech.visits} visit{tech.visits !== 1 ? 's' : ''}</span>
+                      {/if}
+                      {#if !tech.worksThisDay && tech.visits > 0}
+                        <span class="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">conflict</span>
+                      {/if}
+                    </div>
+                    {#if tech.suburbs.length > 0}
+                      <p class="text-xs text-muted mt-0.5 truncate">{tech.suburbs.join(' · ')}</p>
+                    {/if}
+                  </div>
+                  {#if tech.visits > 0}
+                    <button onclick={() => selectDay(day.date)} class="text-xs text-primary hover:underline flex-shrink-0 mt-0.5">
+                      View →
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+            {/each}
+          </div>
+        </div>
+      {/each}
+    </div>
+
+    {#if backlog.length > 0}
+      <div class="mt-6 mb-3 flex items-center gap-2">
+        <h2 class="text-base font-medium text-text">Backlog</h2>
+        <span class="text-xs px-1.5 py-0.5 rounded-full bg-red-50 text-danger border border-red-200">{backlog.length}</span>
+      </div>
+      <div class="bg-card border border-border rounded-xl overflow-hidden">
+        {#each backlog as visit, i}
+          <div class="px-4 py-3 {i !== 0 ? 'border-t border-border' : ''}">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-text truncate">{visit.properties?.customers?.name ?? '—'}</p>
+                <p class="text-xs text-muted truncate">{visit.properties?.address}</p>
+                <p class="text-xs text-danger mt-0.5">
+                  {new Date(visit.scheduled_date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  {#if visit.skip_reason}· {visit.skip_reason}{/if}
+                </p>
+              </div>
+              <span class="text-xs px-2 py-0.5 rounded-full border capitalize flex-shrink-0 {statusColors[visit.status]}">
+                {visit.status}
+              </span>
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+
+  <!-- ── MONTH VIEW ── -->
+  {:else if view === 'month'}
     <div class="bg-card border border-border rounded-xl overflow-hidden mb-6">
       <div class="flex items-center justify-between px-4 py-3 border-b border-border">
         <button onclick={() => changeMonth(-1)} class="p-1 text-muted hover:text-text transition-colors">
@@ -126,13 +245,11 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
       </div>
-
       <div class="grid grid-cols-7 border-b border-border">
         {#each days as d}
           <div class="py-2 text-center text-xs text-muted font-medium">{d}</div>
         {/each}
       </div>
-
       <div class="grid grid-cols-7">
         {#each monthGrid as cell, i}
           {#if cell === null}
@@ -141,14 +258,9 @@
             {@const info = monthMap[cell]}
             {@const isSelected = cell === selectedDate}
             {@const isToday = cell === today}
-            <button
-              onclick={() => selectDay(cell)}
-              class="min-h-[52px] p-1.5 flex flex-col items-center gap-1 transition-colors
-                {i % 7 !== 6 ? 'border-r' : ''} border-b border-border/50
-                {isSelected ? 'bg-primary/10' : 'hover:bg-surface'}"
-            >
-              <span class="w-6 h-6 flex items-center justify-center rounded-full text-xs font-medium
-                {isSelected ? 'bg-primary text-white' : isToday ? 'text-primary font-bold' : 'text-text'}">
+            <button onclick={() => selectDay(cell)}
+              class="min-h-[52px] p-1.5 flex flex-col items-center gap-1 transition-colors {i % 7 !== 6 ? 'border-r' : ''} border-b border-border/50 {isSelected ? 'bg-primary/10' : 'hover:bg-surface'}">
+              <span class="w-6 h-6 flex items-center justify-center rounded-full text-xs font-medium {isSelected ? 'bg-primary text-white' : isToday ? 'text-primary font-bold' : 'text-text'}">
                 {Number(cell.split('-')[2])}
               </span>
               {#if info}
@@ -166,7 +278,6 @@
         {/each}
       </div>
     </div>
-
     <div class="flex items-center gap-4 mb-6 px-1">
       <div class="flex items-center gap-1.5 text-xs text-muted">
         <span class="w-2 h-2 rounded-full bg-primary"></span> Pending
@@ -175,7 +286,6 @@
         <span class="w-2 h-2 rounded-full bg-green-500"></span> Completed
       </div>
     </div>
-
     {#if visits.length > 0}
       <div class="mb-3">
         <h2 class="text-base font-medium text-text">{formatDate(selectedDate)}</h2>
@@ -200,9 +310,8 @@
       <p class="text-sm text-muted text-center py-6">No visits on {formatDate(selectedDate)}</p>
     {/if}
 
+  <!-- ── DAY VIEW ── -->
   {:else}
-    <!-- DAY VIEW -->
-
     <!-- Week strip -->
     <div class="bg-card border border-border rounded-xl mb-6 overflow-hidden">
       <div class="flex items-center justify-between px-4 py-2 border-b border-border">
@@ -218,11 +327,8 @@
       </div>
       <div class="grid grid-cols-7 px-2 py-2">
         {#each weekDates as wd, i}
-          <button
-            onclick={() => goto(`?date=${wd.date}`)}
-            class="flex flex-col items-center gap-1 py-1.5 rounded-lg transition-colors
-              {wd.date === selectedDate ? 'bg-primary' : 'hover:bg-surface'}"
-          >
+          <button onclick={() => goto(`?date=${wd.date}`)}
+            class="flex flex-col items-center gap-1 py-1.5 rounded-lg transition-colors {wd.date === selectedDate ? 'bg-primary' : 'hover:bg-surface'}">
             <span class="text-xs {wd.date === selectedDate ? 'text-white' : 'text-muted'}">{days[i]}</span>
             <span class="text-sm font-medium {wd.date === selectedDate ? 'text-white' : wd.date === today ? 'text-primary' : 'text-text'}">
               {new Date(wd.date + 'T00:00:00').getDate()}
@@ -236,9 +342,7 @@
     <!-- Day header -->
     <div class="mb-4">
       <h1 class="text-xl font-semibold text-text">{formatDate(selectedDate)}</h1>
-      <p class="text-sm text-muted">
-        {visits.filter((v: any) => v.status === 'completed').length}/{visits.length} completed
-      </p>
+      <p class="text-sm text-muted">{visits.filter((v: any) => v.status === 'completed').length}/{visits.length} completed</p>
     </div>
 
     <!-- Visits list -->
@@ -250,6 +354,8 @@
       <div class="space-y-3 mb-6">
         {#each visits as visit}
           <div class="bg-card border border-border rounded-xl overflow-hidden">
+
+            <!-- Visit info -->
             {#if visit.status === 'in_progress' || visit.status === 'completed'}
               <a href="/visits/{visit.id}" class="block px-4 py-3">
                 <div class="flex items-start justify-between gap-3">
@@ -261,12 +367,9 @@
                     {#if visit.scheduled_time}<p class="text-xs text-muted mt-1">{formatTime(visit.scheduled_time)}</p>{/if}
                   </div>
                   <div class="flex flex-col items-end gap-1 flex-shrink-0">
-                    <span class="text-xs px-2 py-0.5 rounded-full border capitalize {statusColors[visit.status]}">
-                      {visit.status.replace('_', ' ')}
-                    </span>
+                    <span class="text-xs px-2 py-0.5 rounded-full border capitalize {statusColors[visit.status]}">{visit.status.replace('_', ' ')}</span>
                     {#if visit.invoices?.[0]}
-                      <span class="text-xs px-2 py-0.5 rounded-full border capitalize
-                        {visit.invoices[0].status === 'paid' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-amber-50 text-amber-600 border-amber-200'}">
+                      <span class="text-xs px-2 py-0.5 rounded-full border capitalize {visit.invoices[0].status === 'paid' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-amber-50 text-amber-600 border-amber-200'}">
                         $ {visit.invoices[0].status}
                       </span>
                     {/if}
@@ -284,12 +387,9 @@
                     {#if visit.scheduled_time}<p class="text-xs text-muted mt-1">{formatTime(visit.scheduled_time)}</p>{/if}
                   </div>
                   <div class="flex flex-col items-end gap-1 flex-shrink-0">
-                    <span class="text-xs px-2 py-0.5 rounded-full border capitalize {statusColors[visit.status]}">
-                      {visit.status.replace('_', ' ')}
-                    </span>
+                    <span class="text-xs px-2 py-0.5 rounded-full border capitalize {statusColors[visit.status]}">{visit.status.replace('_', ' ')}</span>
                     {#if visit.invoices?.[0]}
-                      <span class="text-xs px-2 py-0.5 rounded-full border capitalize
-                        {visit.invoices[0].status === 'paid' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-amber-50 text-amber-600 border-amber-200'}">
+                      <span class="text-xs px-2 py-0.5 rounded-full border capitalize {visit.invoices[0].status === 'paid' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-amber-50 text-amber-600 border-amber-200'}">
                         $ {visit.invoices[0].status}
                       </span>
                     {/if}
@@ -298,6 +398,7 @@
               </div>
             {/if}
 
+            <!-- Actions -->
             {#if skipVisitId === visit.id}
               <div class="px-4 pb-3 border-t border-border">
                 <form method="POST" action="?/skipVisit" use:enhance={() => {
@@ -310,8 +411,7 @@
                     placeholder="e.g. Gate locked, no access"
                     class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary resize-none"></textarea>
                   <div class="flex gap-2 mt-2">
-                    <button type="submit"
-                      class="flex-1 py-1.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-lg border border-slate-200 hover:bg-slate-200 transition-colors">
+                    <button type="submit" class="flex-1 py-1.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-lg border border-slate-200 hover:bg-slate-200 transition-colors">
                       Confirm skip
                     </button>
                     <button type="button" onclick={() => skipVisitId = null}
@@ -321,22 +421,71 @@
                   </div>
                 </form>
               </div>
-            {:else if visit.status === 'pending' || visit.status === 'skipped'}
-              <div class="px-4 pb-3 flex gap-2 border-t border-border pt-3">
-                <form method="POST" action="?/startVisit" use:enhance class="flex-1">
+
+            {:else if rescheduleVisitId === visit.id}
+              <!-- Reschedule panel -->
+              <div class="px-4 pb-4 border-t border-border pt-3">
+                <p class="text-xs font-medium text-text mb-3">Reschedule visit</p>
+                <form method="POST" action="?/rescheduleVisit" use:enhance={() => {
+                  return async ({ update }) => { await update(); rescheduleVisitId = null }
+                }}>
                   <input type="hidden" name="visitId" value={visit.id} />
-                  <input type="hidden" name="oldStatus" value={visit.status} />
-                  <button type="submit"
-                    class="w-full py-2 bg-primary text-white text-xs font-medium rounded-lg hover:bg-primary-dark transition-colors">
-                    Start visit
-                  </button>
+                  <input type="hidden" name="oldDate" value={selectedDate} />
+                  <input type="hidden" name="oldTechId" value={visit.technician_id} />
+                  <div class="grid grid-cols-2 gap-2 mb-3">
+                    <div>
+                      <label class="block text-xs text-muted mb-1">New date</label>
+                      <input type="date" name="newDate" bind:value={rescheduleDate}
+                        class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary" required />
+                    </div>
+                    <div>
+                      <label class="block text-xs text-muted mb-1">Technician</label>
+                      <select name="newTechId" bind:value={rescheduleTechId}
+                        class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary">
+                        {#each technicians ?? [] as tech}
+                          <option value={tech.id}>{tech.name}</option>
+                        {/each}
+                      </select>
+                    </div>
+                  </div>
+                  <div class="flex gap-2">
+                    <button type="submit" class="flex-1 py-2 bg-primary text-white text-xs font-medium rounded-lg hover:bg-primary-dark transition-colors">
+                      Confirm
+                    </button>
+                    <button type="button" onclick={() => rescheduleVisitId = null}
+                      class="py-2 px-4 border border-border text-xs rounded-lg hover:bg-surface transition-colors">
+                      Cancel
+                    </button>
+                  </div>
                 </form>
-                <button type="button" onclick={() => { skipVisitId = visit.id; skipReason = '' }}
+              </div>
+
+            {:else if visit.status === 'pending' || visit.status === 'skipped' || visit.status === 'in_progress'}
+              <div class="px-4 pb-3 flex gap-2 border-t border-border pt-3">
+                {#if visit.status !== 'in_progress'}
+                  <form method="POST" action="?/startVisit" use:enhance class="flex-1">
+                    <input type="hidden" name="visitId" value={visit.id} />
+                    <input type="hidden" name="oldStatus" value={visit.status} />
+                    <button type="submit" class="w-full py-2 bg-primary text-white text-xs font-medium rounded-lg hover:bg-primary-dark transition-colors">
+                      Start visit
+                    </button>
+                  </form>
+                  <button type="button" onclick={() => { skipVisitId = visit.id; skipReason = '' }}
+                    class="py-2 px-4 border border-border text-xs text-muted rounded-lg hover:bg-surface transition-colors">
+                    Skip
+                  </button>
+                {/if}
+                <button type="button" onclick={() => {
+                    rescheduleVisitId = visit.id
+                    rescheduleDate = selectedDate
+                    rescheduleTechId = visit.technician_id ?? ''
+                  }}
                   class="py-2 px-4 border border-border text-xs text-muted rounded-lg hover:bg-surface transition-colors">
-                  Skip
+                  Reschedule
                 </button>
               </div>
             {/if}
+
           </div>
         {/each}
       </div>
@@ -362,28 +511,22 @@
                 </p>
               </div>
               <div class="flex items-center gap-1 flex-shrink-0">
-                <span class="text-xs px-2 py-0.5 rounded-full border capitalize {statusColors[visit.status]}">
-                  {visit.status}
-                </span>
+                <span class="text-xs px-2 py-0.5 rounded-full border capitalize {statusColors[visit.status]}">{visit.status}</span>
                 <form method="POST" action="?/moveToDay" use:enhance={() => {
-    return async ({ update }) => { await update() }
-  }}>
-    <input type="hidden" name="visitId" value={visit.id} />
-    <input type="hidden" name="targetDate" value={selectedDate} />
-    <input type="hidden" name="oldDate" value={visit.scheduled_date} />
-    <button type="submit"
-      class="px-2 py-1 text-xs text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors"
-      title="Move to {selectedDate}">
-      → {selectedDate === today ? 'Today' : selectedDate}
-    </button>
-  </form>
+                  return async ({ update }) => { await update() }
+                }}>
+                  <input type="hidden" name="visitId" value={visit.id} />
+                  <input type="hidden" name="targetDate" value={selectedDate} />
+                  <input type="hidden" name="oldDate" value={visit.scheduled_date} />
+                  <button type="submit" class="px-2 py-1 text-xs text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors">
+                    → {selectedDate === today ? 'Today' : selectedDate}
+                  </button>
+                </form>
                 <form method="POST" action="?/cancelVisit" use:enhance={() => {
                   return async ({ update }) => { await update() }
                 }}>
                   <input type="hidden" name="visitId" value={visit.id} />
-                  <button type="submit"
-                    class="p-1.5 text-muted hover:text-danger border border-border rounded-lg hover:bg-red-50 transition-colors"
-                    title="Cancel visit">
+                  <button type="submit" class="p-1.5 text-muted hover:text-danger border border-border rounded-lg hover:bg-red-50 transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                   </button>
                 </form>
@@ -394,4 +537,5 @@
       </div>
     {/if}
   {/if}
+
 </div>

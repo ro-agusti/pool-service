@@ -1,8 +1,18 @@
+// src/routes/(app)/customers/[id]/properties/[propertyId]/plans/[planId]/edit/+page.server.ts
 import { redirect, fail, error } from '@sveltejs/kit'
 import { createClient } from '@supabase/supabase-js'
 import { PUBLIC_SUPABASE_URL } from '$env/static/public'
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private'
 import type { Actions, PageServerLoad } from './$types'
+
+function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat/2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng/2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
 
 export const load: PageServerLoad = async ({ locals, params }) => {
   const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
@@ -17,17 +27,30 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 
   const { data: property } = await locals.supabase
     .from('properties')
-    .select('id, address, org_id, customers(id, name)')
+    .select('id, address, lat, lng, org_id, customers(id, name)')
     .eq('id', params.propertyId)
     .single()
 
-  const { data: technicians } = await admin
-  .from('users')
-  .select('id, name')
-  .eq('org_id', property?.org_id)
-  .order('name')
+  const { data: rawTechs } = await admin
+    .from('users')
+    .select('id, name, lat, lng, address')
+    .eq('org_id', property?.org_id)
+    .eq('active', true)
+    .order('name')
 
-  return { plan, property, customer: property?.customers, technicians: technicians ?? [] }
+  const technicians = (rawTechs ?? []).map((t: any) => {
+    let distanceKm: number | null = null
+    if (property?.lat && property?.lng && t.lat && t.lng) {
+      distanceKm = Math.round(haversine(property.lat, property.lng, t.lat, t.lng))
+    }
+    return { ...t, distanceKm }
+  }).sort((a: any, b: any) => {
+    if (a.distanceKm === null) return 1
+    if (b.distanceKm === null) return -1
+    return a.distanceKm - b.distanceKm
+  })
+
+  return { plan, property, customer: property?.customers, technicians }
 }
 
 export const actions: Actions = {
@@ -56,7 +79,6 @@ export const actions: Actions = {
 
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' })
 
-    // Borrar visitas futuras pendientes
     await admin
       .from('visits')
       .delete()
@@ -64,7 +86,6 @@ export const actions: Actions = {
       .eq('status', 'pending')
       .gte('scheduled_date', todayStr)
 
-    // Regenerar si sigue activo
     if (active) {
       const { data: property } = await admin
         .from('properties')
@@ -78,7 +99,6 @@ export const actions: Actions = {
         .eq('id', params.planId)
         .single()
 
-      // Si start_date es futura usarla, sino generar desde hoy
       const generateFrom = currentPlan?.start_date > todayStr
         ? currentPlan.start_date
         : todayStr
@@ -95,7 +115,6 @@ export const actions: Actions = {
 
   delete: async ({ params }) => {
     const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' })
 
     await admin
@@ -151,35 +170,20 @@ async function generateVisits(
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' })
   const [ty, tm, td] = todayStr.split('-').map(Number)
   const [ly, lm, ld] = addDays(ty, tm, td, 42)
-
   const [sy, sm, sd] = startDate.split('-').map(Number)
-  let [cy, cm, cd] = compareDate(sy, sm, sd, ty, tm, td) >= 0
-    ? [sy, sm, sd]
-    : [ty, tm, td]
-
+  let [cy, cm, cd] = compareDate(sy, sm, sd, ty, tm, td) >= 0 ? [sy, sm, sd] : [ty, tm, td]
   const offset = (targetDow - dowOf(cy, cm, cd) + 7) % 7
   if (offset > 0) [cy, cm, cd] = addDays(cy, cm, cd, offset)
-
   if (compareDate(cy, cm, cd, ly, lm, ld) > 0) return
-
   const intervalDays = recurrence === 'weekly' ? 7 : recurrence === 'fortnightly' ? 14 : 28
   const visits: any[] = []
-
   while (compareDate(cy, cm, cd, ly, lm, ld) <= 0) {
     visits.push({
-      org_id: orgId,
-      property_id: propertyId,
-      service_plan_id: planId,
-      technician_id: technicianId,
-      type: 'recurring',
-      scheduled_date: toStr(cy, cm, cd),
-      scheduled_time: time,
-      status: 'pending'
+      org_id: orgId, property_id: propertyId, service_plan_id: planId,
+      technician_id: technicianId, type: 'recurring',
+      scheduled_date: toStr(cy, cm, cd), scheduled_time: time, status: 'pending'
     })
     ;[cy, cm, cd] = addDays(cy, cm, cd, intervalDays)
   }
-
-  if (visits.length > 0) {
-    await admin.from('visits').insert(visits)
-  }
+  if (visits.length > 0) await admin.from('visits').insert(visits)
 }

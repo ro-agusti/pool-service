@@ -1,7 +1,7 @@
 // src/routes/(app)/settings/team/[userId]/+page.server.ts
 import { error, redirect } from '@sveltejs/kit'
 import { createClient } from '@supabase/supabase-js'
-import { PUBLIC_SUPABASE_URL } from '$env/static/public'
+import { PUBLIC_GOOGLE_MAPS_KEY, PUBLIC_SUPABASE_URL } from '$env/static/public'
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private'
 import type { PageServerLoad, Actions } from './$types'
 
@@ -55,25 +55,43 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 }
 
 export const actions: Actions = {
-  updateMember: async ({ request, params }) => {
-    const form = await request.formData()
-    const name        = form.get('name') as string
-    const phone       = form.get('phone') as string | null
-    const email       = form.get('email') as string
-    const address     = form.get('address') as string | null
-    const workingDays = form.getAll('working_days').map(Number)
+ updateMember: async ({ request, params }) => {
+  const form = await request.formData()
+  const name        = form.get('name') as string
+  const phone       = form.get('phone') as string | null
+  const email       = form.get('email') as string
+  const address     = form.get('address') as string | null
+  const workingDays = form.getAll('working_days').map(Number)
 
-    const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+  const admin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    await admin.from('users').update({
-      name, phone, email, address,
-      working_days: workingDays.length > 0 ? workingDays : [1,2,3,4,5]
-    }).eq('id', params.userId)
-
-    if (email) {
-      await admin.auth.admin.updateUserById(params.userId, { email })
+  // Geocode address if provided
+  let lat: number | null = null
+  let lng: number | null = null
+  if (address) {
+    try {
+      const geoRes = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${PUBLIC_GOOGLE_MAPS_KEY}`
+      )
+      const geoData = await geoRes.json()
+      if (geoData.results?.[0]?.geometry?.location) {
+        lat = geoData.results[0].geometry.location.lat
+        lng = geoData.results[0].geometry.location.lng
+      }
+    } catch (e) {
+      console.error('Geocoding failed:', e)
     }
-  },
+  }
+
+  await admin.from('users').update({
+    name, phone, email, address, lat, lng,
+    working_days: workingDays.length > 0 ? workingDays : [1,2,3,4,5]
+  }).eq('id', params.userId)
+
+  if (email) {
+    await admin.auth.admin.updateUserById(params.userId, { email })
+  }
+},
 
   markAway: async ({ request, params, locals }) => {
     const form = await request.formData()
