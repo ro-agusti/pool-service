@@ -44,12 +44,12 @@
   <!-- Top nav — desktop only -->
   <nav class="hidden md:flex bg-card border-b border-border px-6 py-3 items-center justify-between">
     <div class="flex items-center gap-6">
-      <div class="flex items-center gap-2">
-        <div class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-          <span class="text-white text-xs font-bold">C</span>
-        </div>
-        <span class="font-semibold text-text">ClearWave</span>
-      </div>
+      <a href="/" class="flex items-center gap-2">
+  <div class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+    <span class="text-white text-xs font-bold">C</span>
+  </div>
+  <span class="font-semibold text-text">ClearWave</span>
+</a>
       <nav class="flex items-center gap-1">
         {#each navItems as item}
           <a href={item.href}
@@ -70,12 +70,12 @@
 
   <!-- Top bar mobile -->
   <div class="md:hidden bg-card border-b border-border px-4 py-3 flex items-center justify-between">
-    <div class="flex items-center gap-2">
-      <div class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-        <span class="text-white text-xs font-bold">C</span>
-      </div>
-      <span class="font-semibold text-text">ClearWave</span>
-    </div>
+    <a href="/" class="flex items-center gap-2">
+  <div class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+    <span class="text-white text-xs font-bold">C</span>
+  </div>
+  <span class="font-semibold text-text">ClearWave</span>
+</a>
     <form method="POST" action="/logout">
       <button type="submit" class="text-sm text-muted hover:text-text transition-colors">Sign out</button>
     </form>
